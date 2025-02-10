@@ -1,9 +1,10 @@
 import React from 'react'
+import Paths from './Paths'
 
 const App = () => {
   return (
     <div>
-      This is the main app
+      <Paths/>
     </div>
   )
 }
