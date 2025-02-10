@@ -1,4 +1,5 @@
 import React from 'react'
+import { assets } from '../assets/assets'
 
 const View = () => {
   return (
@@ -9,6 +10,8 @@ const View = () => {
       <button className="add-btn">Add</button>
 
     </div>
+    <img src={assets.logo} alt="logo" />
+
     </div>
   )
 }
