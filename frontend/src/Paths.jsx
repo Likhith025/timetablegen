@@ -1,5 +1,8 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom';
+import './Button.css'
+import './Global.css'
+
 
 import Login from './pages/Login/Login';
 import OTP from './pages/Login/OTP';
