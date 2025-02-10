@@ -1,1 +1,1 @@
-# timetablegen
+# Time Table Generator
