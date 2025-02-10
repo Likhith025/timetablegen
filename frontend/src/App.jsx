@@ -1,5 +1,6 @@
 import React from 'react'
 import Paths from './Paths'
+import './Global.css'
 
 const App = () => {
   return (

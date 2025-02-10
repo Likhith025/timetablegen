@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 
 import Login from './pages/Login/Login';
 import OTP from './pages/Login/OTP';
+import View from './pages/View';
 
 
 const Paths = () => {
@@ -12,6 +13,7 @@ const Paths = () => {
 
         <Route path='/' element={<Login/>}/>
         <Route path='/otp' element={<OTP/>}/>
+        <Route path='/view' element={<View/>}/>
       </Routes>
     </div>
   )
