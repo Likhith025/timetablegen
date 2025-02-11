@@ -1,6 +1,6 @@
 import React from 'react';
-import logo from '../assets/logo.png';
 import { Link } from 'react-router-dom';
+import {assets} from '../assets/assets.js'
 
 const View = () => {
   return (
@@ -17,7 +17,7 @@ const View = () => {
       
       {/* Image with styles to bring it to the front */}
       <img 
-        src={logo} 
+        src={assets.logo} 
         alt="Logo" 
         style={{
           position: 'absolute',
