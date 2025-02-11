@@ -10,7 +10,7 @@ const View = () => {
         <button className="pdf-btn">Export as PDF</button>
         <button className="add-btn">Add</button>
         <button>Signin Button</button>
-        <Link to='/'>
+        <Link to="/">
         <button>Go Back</button>
         </Link>
       </div>
