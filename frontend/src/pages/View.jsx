@@ -1,5 +1,6 @@
 import React from 'react';
 import logo from '../assets/logo.png';
+import { Link } from 'react-router-dom';
 
 const View = () => {
   return (
@@ -9,6 +10,9 @@ const View = () => {
         <button className="pdf-btn">Export as PDF</button>
         <button className="add-btn">Add</button>
         <button>Signin Button</button>
+        <Link to='/'>
+        <button>Go Back</button>
+        </Link>
       </div>
       
       {/* Image with styles to bring it to the front */}
