@@ -1,4 +1,4 @@
-import logo from './logo.jpg'
+import logo from './logo.png'
 import bg from './bg.jpg'
 
 export const assets={
