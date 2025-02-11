@@ -8,6 +8,7 @@ const View = () => {
       <button className="csv-btn">Export as CSV</button>
       <button className="pdf-btn">Export as PDF</button>
       <button className="add-btn">Add</button>
+      <button >Signin Button</button>
 
     </div>
     <img src={assets.logo} alt="logo" />
