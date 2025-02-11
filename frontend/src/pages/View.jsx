@@ -1,5 +1,5 @@
 import React from 'react'
-import { assets } from '../assets/assets'
+import logo from '../assets/logo.png'
 
 const View = () => {
   return (
@@ -11,8 +11,7 @@ const View = () => {
       <button >Signin Button</button>
 
     </div>
-    <img src={assets.logo} alt="logo" />
-
+      <img src={logo} alt="Data" />
     </div>
   )
 }
