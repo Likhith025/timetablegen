@@ -4,6 +4,7 @@ import Paths from './Paths'
 const App = () => {
   return (
     <div>
+      Tiinavara
       <Paths/>
     </div>
   )
