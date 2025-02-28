@@ -3,3 +3,30 @@
 And for buttons, the CSS will be in Button.css file
 
 */
+a{
+    color: black;
+}
+
+.loginpage {
+    position: absolute;
+    right: 10vw;
+    top: 10%;
+    transform: scale(1.2);
+}
+
+@media (max-width: 1024px) { 
+    .loginpage {
+        right: 5vw; 
+    }
+}
+
+@media (max-width: 768px) { 
+    .loginpage {
+        position: relative; 
+        right: auto; 
+        left: 50%;
+        transform: translateX(-50%) scale(1); 
+        width: 90%; 
+        max-width: 400px; 
+    }
+}

@@ -2,6 +2,8 @@ import React from 'react'
 import { Routes, Route } from 'react-router-dom';
 import './Button.css'
 import './Global.css'
+import './LogIn.css'
+import './Input.css'
 
 
 import Login from './pages/Login/Login';

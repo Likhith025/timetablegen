@@ -1,0 +1,16 @@
+.label1{
+    border: 1px solid black;
+    border-radius: 3px;
+    width: 200px;
+    height: 25px;
+    padding: 2px;
+    background-color: #d9d9d9;
+}
+
+.label1::placeholder{
+    text-indent: 8px;
+}
+
+.forgotpassword{
+    font-size: 10px;
+}

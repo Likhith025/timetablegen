@@ -14,8 +14,6 @@ const View = () => {
         <button>Go Back</button>
         </Link>
       </div>
-
-      <p>Champak Chutiye</p>
       
       {/* Image with styles to bring it to the front */}
       <img 
