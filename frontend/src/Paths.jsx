@@ -9,6 +9,7 @@ import './Input.css'
 import Login from './pages/Login/Login';
 import OTP from './pages/Login/OTP';
 import View from './pages/View';
+import Loader from './components/Loader';
 
 
 const Paths = () => {
@@ -19,6 +20,7 @@ const Paths = () => {
         <Route path='/' element={<Login/>}/>
         <Route path='/otp' element={<OTP/>}/>
         <Route path='/view' element={<View/>}/>
+        <Route path='/loader' element={<Loader/>}/>
       </Routes>
     </div>
   )
