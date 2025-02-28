@@ -3,13 +3,18 @@
 And for buttons, the CSS will be in Button.css file
 
 */
+body{
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+
 a{
     color: black;
 }
 
 .loginpage {
     position: absolute;
-    right: 10vw;
+    right: 15vw;
     top: 10%;
     transform: scale(1.2);
 }

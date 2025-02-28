@@ -7,9 +7,11 @@ import './Input.css'
 
 
 import Login from './pages/Login/Login';
-import OTP from './pages/Login/OTP';
 import View from './pages/View';
 import Loader from './components/Loader';
+import Register from './pages/Login/Register';
+import NewPassword from './pages/Login/NewPassword';
+import OTpass from './pages/Login/OTpass';
 
 
 const Paths = () => {
@@ -18,9 +20,11 @@ const Paths = () => {
       <Routes>
 
         <Route path='/' element={<Login/>}/>
-        <Route path='/otp' element={<OTP/>}/>
         <Route path='/view' element={<View/>}/>
         <Route path='/loader' element={<Loader/>}/>
+        <Route path='/register' element={<Register/>}/>
+        <Route path='/newpassword' element={<NewPassword/>}/>  
+        <Route path='/otp' element={<OTpass/>}/>       
       </Routes>
     </div>
   )
