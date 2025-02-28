@@ -3,6 +3,11 @@
 And for buttons, the CSS will be in Button.css file
 
 */
+body{
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+
 a{
     color: black;
 }
