@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
-import API_BASE_URL from '../../src.js'
+import API_BASE_URL from '../../src.js';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -9,37 +9,13 @@ const Login = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleGoogleLogin = async (authResult) => {
-    try {
-      console.log("Google Auth Code:", authResult.code);
-  
-      window.location.href = `${API_BASE_URL}/auth/google`;
-  
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "Google login failed");
-      }
-  
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-  
-      navigate("/dashboard");
-    } catch (err) {
-      console.error("Google login error:", err);
-      setError("Google login failed. Try again.");
-    }
-  };
-    
-  // Google Login function
+  // Google Login function (Redirect-based)
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
-    onSuccess: handleGoogleLogin,
-    onError: (err) => {
-      console.error('Google login failed:', err);
-      setError('Google login failed. Try again.');
-    },
+    ux_mode: 'redirect', // Forces redirect instead of popup
+    redirect_uri: `${API_BASE_URL}/auth/google/callback`, // Ensure backend handles this
   });
-  
+
   // Handle Email/Password Login
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -72,9 +48,7 @@ const Login = () => {
     <div className='loginpage'>
       <div className="box1">
         <h1>Log In</h1>
-
         {error && <p className="error">{error}</p>}
-
         <form onSubmit={handleLogin}>
           <div className="labeldiv">
             <p>Email Id</p>
@@ -107,14 +81,11 @@ const Login = () => {
               Forgot Password?
             </a>
           </div>
-
           <br />
           <button type="submit" className="button1">Log In</button>
         </form>
-
         <p>Or</p>
-
-        <button className="SignInWithGoogle" onClick={() => googleLogin()}>
+        <button className="SignInWithGoogle" onClick={() => googleLogin()}> 
           <img 
             src="https://developers.google.com/identity/images/g-logo.png" 
             alt="Google Logo" 
@@ -123,7 +94,6 @@ const Login = () => {
           />
           Sign In with Google
         </button>
-
         <p>
           Don't have an Account?{' '}
           <a 
