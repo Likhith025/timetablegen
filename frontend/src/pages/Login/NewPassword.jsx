@@ -41,7 +41,7 @@ const NewPassword = () => {
       }
 
       alert('Password changed successfully');
-      navigate('/login'); // Redirect to login after success
+      navigate('/'); // Redirect to login after success
     } catch (err) {
       setError(err.message);
     } finally {

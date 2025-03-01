@@ -5,10 +5,8 @@
     height: 25px;
     padding: 2px;
     background-color: #d9d9d9;
-}
-
-.label1::placeholder{
     text-indent: 8px;
+    appearance: 'textfield' 
 }
 
 .forgotpassword{

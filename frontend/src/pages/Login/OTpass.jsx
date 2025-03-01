@@ -114,11 +114,12 @@ const OTpass = () => {
             <div className="labeldiv">
               <p>Enter OTP</p>
               <input 
-                type="number" 
+                type="text  " 
                 placeholder="Enter OTP" 
                 className='label1' 
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
+                
               />
               <p>Didn't receive OTP? <a href="#" onClick={(e) => { e.preventDefault(); handleSendOTP(); }}>Resend</a></p>
             </div>
