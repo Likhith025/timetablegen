@@ -5,12 +5,61 @@ import nodemailer from "nodemailer"
 import otpGenerator from "otp-generator"
 import jwt from "jsonwebtoken"
 
-export const addEmailUser = async (req, res) => {
+const otpStore = {}; // Store OTPs temporarily (Consider Redis for production)
+
+// 📌 Function to send OTP
+const sendOTP = async (email) => {
+    const otp = otpGenerator.generate(6, { digits:true,lowerCaseAlphabets: false, 
+        upperCaseAlphabets: false, 
+        specialChars: false , upperCase: false, specialChars: false });
+    otpStore[email] = { otp, expiresAt: Date.now() + 5 * 60 * 1000 }; // Expires in 5 minutes
+
+    const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+    });
+
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: "Your OTP for Registration",
+        text: `Your OTP is ${otp}. It is valid for 5 minutes.`,
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
+// 📌 Route 1: Send OTP to Email
+export const sendEmailOTP = async (req, res) => {
     try {
-        const { email, name, password, loginType, role } = req.body;
+        const { email } = req.body;
 
         let user = await User.findOne({ email });
+        if (user) {
+            return res.status(400).json({ message: "Email already exists" });
+        }
 
+        await sendOTP(email);
+        res.status(200).json({ message: "OTP sent to email" });
+
+    } catch (error) {
+        res.status(500).json({ message: "Error sending OTP", error: error.message });
+    }
+};
+
+// 📌 Route 2: Verify OTP and Register User
+export const addEmailUser = async (req, res) => {
+    try {
+        const { email, name, password, role, otp } = req.body;
+
+        if (!otpStore[email] || otpStore[email].otp !== otp || otpStore[email].expiresAt < Date.now()) {
+            return res.status(400).json({ message: "Invalid or expired OTP" });
+        }
+
+        let user = await User.findOne({ email });
         if (user) {
             return res.status(400).json({ message: "Email already exists" });
         }
@@ -23,14 +72,16 @@ export const addEmailUser = async (req, res) => {
             email,
             password: hashedPassword,
             role,
-            loginType:"Email",
+            loginType: "Email",
         });
 
         await user.save();
+        delete otpStore[email]; // Remove OTP after successful registration
 
-        res.status(201).json({ message: "User added successfully" });
+        res.status(201).json({ message: "User registered successfully" });
+
     } catch (error) {
-        res.status(500).json({ message: "Unable to add user", error: error.message });
+        res.status(500).json({ message: "Unable to register user", error: error.message });
     }
 };
 
