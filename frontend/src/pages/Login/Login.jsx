@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import API_BASE_URL from '../../src';
+import { useGoogleLogin } from '@react-oauth/google';
+import API_BASE_URL from '../../src.js'
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -8,6 +9,38 @@ const Login = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const handleGoogleLogin = async (authResult) => {
+    try {
+      console.log("Google Auth Code:", authResult.code);
+  
+      window.location.href = `${API_BASE_URL}/auth/google`;
+  
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Google login failed");
+      }
+  
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+  
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Google login error:", err);
+      setError("Google login failed. Try again.");
+    }
+  };
+    
+  // Google Login function
+  const googleLogin = useGoogleLogin({
+    flow: 'auth-code',
+    onSuccess: handleGoogleLogin,
+    onError: (err) => {
+      console.error('Google login failed:', err);
+      setError('Google login failed. Try again.');
+    },
+  });
+  
+  // Handle Email/Password Login
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -22,12 +55,10 @@ const Login = () => {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.message || 'Login failed');
       }
 
-      // Store token in localStorage
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
@@ -66,16 +97,15 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)} 
             />
             <a 
-  href="#" 
-  className="forgotpassword" 
-  onClick={(e) => {
-    e.preventDefault();
-    navigate('/otp', { state: { email } });
-  }}
->
-  Forgot Password?
-</a>
-
+              href="#" 
+              className="forgotpassword" 
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/otp', { state: { email } });
+              }}
+            >
+              Forgot Password?
+            </a>
           </div>
 
           <br />
@@ -84,7 +114,7 @@ const Login = () => {
 
         <p>Or</p>
 
-        <button className="SignInWithGoogle">
+        <button className="SignInWithGoogle" onClick={() => googleLogin()}>
           <img 
             src="https://developers.google.com/identity/images/g-logo.png" 
             alt="Google Logo" 
@@ -94,16 +124,18 @@ const Login = () => {
           Sign In with Google
         </button>
 
-        <p>Don't have an Account? <a 
-  href="#" 
-  onClick={(e) => {
-    e.preventDefault();
-    navigate('/register');
-  }}
->
-  Register
-</a>
-</p>
+        <p>
+          Don't have an Account?{' '}
+          <a 
+            href="#" 
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/register');
+            }}
+          >
+            Register
+          </a>
+        </p>
       </div>
     </div>
   );

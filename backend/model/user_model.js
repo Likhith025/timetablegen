@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
     email : {type:String ,requried:true,unique:true},
     password :{type:String,requried : true},
     userId :{type : String},
-    loginType :{type : String,enum:["OAuth","Email"],requried : true},
+    loginType :{type : String,enum:["Google","Email"],requried : true},
     role:{type : String,enum:["admin","user"],default:"user",requried :true},
     timetables:[{type:mongoose.Schema.Types.ObjectId,ref:"Timetable"}],
 

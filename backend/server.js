@@ -2,7 +2,9 @@ import express from "express";
 import dotenv from "dotenv";
 import connectDB from "./database/config.js";
 import userRouter from "./route/userRoute.js";
-import cors from 'cors'
+import cors from 'cors';
+import "./database/passport.js";  // Ensure passport configuration loads
+import Grouter from "./route/googleRoute.js";
 
 dotenv.config();
 
@@ -27,6 +29,7 @@ app.get("/", (req, res) => {
 });
 
 app.use('/user',userRouter);
+app.use('/auth',Grouter);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

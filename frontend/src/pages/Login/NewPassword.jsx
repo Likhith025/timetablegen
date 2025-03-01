@@ -40,8 +40,7 @@ const NewPassword = () => {
         throw new Error(data.message || 'Password reset failed');
       }
 
-      alert('Password changed successfully');
-      navigate('/'); // Redirect to login after success
+      navigate('/');
     } catch (err) {
       setError(err.message);
     } finally {
