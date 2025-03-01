@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import dotenv from "dotenv"
 import nodemailer from "nodemailer"
 import otpGenerator from "otp-generator"
+import jwt from "jsonwebtoken"
 
 export const addEmailUser = async (req, res) => {
     try {
@@ -147,5 +148,46 @@ export const resetPassword = async (req, res) => {
         res.status(200).json({ message: "Password changed successfully" });
     } catch (error) {
         res.status(500).json({ message: "Error resetting password", error: error.message });
+    }
+};
+
+export const login = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Fix: Await the database query
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(401).json({ message: "Invalid Email" });
+        }
+
+        // Fix: Ensure `user.password` exists before comparing
+        const isMatch = await bcrypt.compare(password, user.password || "");
+
+        if (!isMatch) {
+            return res.status(401).json({ message: "Invalid Password" });
+        }
+
+        // Fix: Correct typo (`iser.role` -> `user.role`)
+        const token = jwt.sign(
+            { id: user._id, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: "7d" }
+        );
+
+        res.status(200).json({
+            message: "Login successful",
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ message: "Invalid Credentials", error: error.message });
     }
 };

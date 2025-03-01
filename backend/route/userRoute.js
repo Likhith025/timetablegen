@@ -1,5 +1,5 @@
 import express from "express";
-import { addEmailUser, editUser, getallUsers, getUserById, resetPassword, sendOtp } from "../controllers/userController.js";
+import { addEmailUser, editUser, getallUsers, getUserById, login, resetPassword, sendOtp } from "../controllers/userController.js";
 
 const userRouter = express.Router();
 
@@ -10,6 +10,8 @@ userRouter.put("/edit/:id",editUser);
 
 userRouter.post("/sendotp",sendOtp);
 userRouter.post("/resetpass",resetPassword);
+
+userRouter.post("/login",login);
 
 
 export default userRouter;
