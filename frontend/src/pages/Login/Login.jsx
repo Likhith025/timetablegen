@@ -1,24 +1,86 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import API_BASE_URL from '../../src';
 
 const Login = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      // Store token in localStorage
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className='loginpage'>
       <div className="box1">
         <h1>Log In</h1>
-        
-        <div className="labeldiv">
-          <p>Email Id</p>
-          <input type="text" placeholder="Email Id" className='label1'/>
-        </div>
 
-        <div className="labeldiv">
-          <p>Password</p>
-          <input type="password" placeholder="Password" className='label1'/>
-          <a href="#" className='forgotpassword'>Forgot Password?</a>
-        </div>
-        <br />
-        <button className="button1">Log In</button>
+        {error && <p className="error">{error}</p>}
+
+        <form onSubmit={handleLogin}>
+          <div className="labeldiv">
+            <p>Email Id</p>
+            <input 
+              type="text" 
+              placeholder="Email Id" 
+              className='label1' 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+            />
+          </div>
+
+          <div className="labeldiv">
+            <p>Password</p>
+            <input 
+              type="password" 
+              placeholder="Password" 
+              className='label1' 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+            />
+            <a 
+  href="#" 
+  className="forgotpassword" 
+  onClick={(e) => {
+    e.preventDefault();
+    navigate('/otp', { state: { email } });
+  }}
+>
+  Forgot Password?
+</a>
+
+          </div>
+
+          <br />
+          <button type="submit" className="button1">Log In</button>
+        </form>
 
         <p>Or</p>
 
@@ -32,7 +94,16 @@ const Login = () => {
           Sign In with Google
         </button>
 
-        <p>Don't have an Account? <a href="#">Register</a></p>
+        <p>Don't have an Account? <a 
+  href="#" 
+  onClick={(e) => {
+    e.preventDefault();
+    navigate('/register');
+  }}
+>
+  Register
+</a>
+</p>
       </div>
     </div>
   );

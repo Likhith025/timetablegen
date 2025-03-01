@@ -29,3 +29,8 @@
     padding: 0; /* Remove extra padding */
     border: none; /* Optional: Remove any unwanted border spacing */
 }
+
+.OTP{
+    display: flex;
+    flex-direction: row;
+}

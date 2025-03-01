@@ -12,6 +12,7 @@ import Loader from './components/Loader';
 import Register from './pages/Login/Register';
 import NewPassword from './pages/Login/NewPassword';
 import OTpass from './pages/Login/OTpass';
+import Dashboard from './pages/Dashboard/Dashboard';
 
 
 const Paths = () => {
@@ -24,7 +25,10 @@ const Paths = () => {
         <Route path='/loader' element={<Loader/>}/>
         <Route path='/register' element={<Register/>}/>
         <Route path='/newpassword' element={<NewPassword/>}/>  
-        <Route path='/otp' element={<OTpass/>}/>       
+        <Route path='/otp' element={<OTpass/>}/>
+
+        <Route path='/dashboard' element={<Dashboard/>}/>       
+
       </Routes>
     </div>
   )

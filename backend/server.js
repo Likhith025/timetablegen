@@ -2,10 +2,19 @@ import express from "express";
 import dotenv from "dotenv";
 import connectDB from "./database/config.js";
 import userRouter from "./route/userRoute.js";
+import cors from 'cors'
 
 dotenv.config();
 
 const app = express();
+
+app.use(cors({
+  origin: "http://localhost:5173", // Allow requests from frontend
+  methods: ["GET", "POST", "PUT", "DELETE"], // Allowed HTTP methods
+  allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
+  credentials: true, // Allow cookies/auth headers
+}));
+
 
 // Middleware
 app.use(express.json());

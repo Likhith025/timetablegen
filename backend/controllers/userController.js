@@ -5,9 +5,8 @@ import nodemailer from "nodemailer"
 import otpGenerator from "otp-generator"
 import jwt from "jsonwebtoken"
 
-const otpStore = {}; // Store OTPs temporarily (Consider Redis for production)
+const otpStore = {};
 
-// 📌 Function to send OTP
 const sendOTP = async (email) => {
     const otp = otpGenerator.generate(6, { digits:true,lowerCaseAlphabets: false, 
         upperCaseAlphabets: false, 
@@ -201,6 +200,21 @@ export const resetPassword = async (req, res) => {
         res.status(500).json({ message: "Error resetting password", error: error.message });
     }
 };
+
+export const verifyOtp = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+
+        if (!otpStorage[email] || otpStorage[email] !== otp) {
+            return res.status(400).json({ message: "Invalid or expired OTP" });
+        }
+
+        res.status(200).json({ message: "OTP verified successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Error verifying OTP", error: error.message });
+    }
+};
+
 
 export const login = async (req, res) => {
     try {
