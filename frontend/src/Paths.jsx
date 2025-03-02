@@ -13,13 +13,12 @@ import Register from './pages/Login/Register';
 import NewPassword from './pages/Login/NewPassword';
 import OTpass from './pages/Login/OTpass';
 import Dashboard from './pages/Dashboard/Dashboard';
-import PageNot from './pages/PageNot';
+import PageNot from './pages/PageNotFound/PageNot';
 
 const Paths = () => {
   return (
     <GoogleOAuthProvider clientId="252303016884-ml8b3g00san0u75nuqtgf3ss8dr5kvkb.apps.googleusercontent.com">
       <Routes>
-        <Route path="*" element={<PageNot />} />
         <Route path="/" element={<Login />} />
         <Route path="/view" element={<View />} />
         <Route path="/loader" element={<Loader />} />
@@ -27,6 +26,7 @@ const Paths = () => {
         <Route path="/newpassword" element={<NewPassword />} />
         <Route path="/otp" element={<OTpass />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="*" element={<PageNot />} />
       </Routes>
     </GoogleOAuthProvider>
   );

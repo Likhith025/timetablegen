@@ -49,6 +49,7 @@ const NewPassword = () => {
   };
 
   return (
+    <div className="bgsetup">
     <div className='loginpage'>
       <div className="box1">
         <h1>New Password</h1>
@@ -56,7 +57,7 @@ const NewPassword = () => {
         {/* Display OTP and Email */}
         <div className="info-box">
           <p><strong>Email:</strong> {email}</p>
-          <p><strong>OTP:</strong> {otp}</p>
+          {/*<p><strong>OTP:</strong> {otp}</p>*/}
         </div>
 
         {error && <p className="error">{error}</p>}
@@ -92,6 +93,7 @@ const NewPassword = () => {
           {loading ? 'Updating...' : 'Continue'}
         </button>
       </div>
+    </div>
     </div>
   );
 };

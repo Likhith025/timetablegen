@@ -21,6 +21,22 @@ a{
     color: black;
 }
 
+.bgsetup {
+    position: fixed; /* Ensures full coverage */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    
+    background-image: url("./assets/bg.jpg"); /* Adjust the path */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+
+    overflow: hidden; /* Prevents white spaces */
+}
+
 .loginpage {
     position: absolute;
     right: 15vw;

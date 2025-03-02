@@ -77,6 +77,7 @@ const OTpass = () => {
   };
 
   return (
+    <div className="bgsetup">
     <div className='loginpage'>
       <div className="box1">
         <h1>Enter OTP</h1>
@@ -131,6 +132,7 @@ const OTpass = () => {
           </>
         )}
       </div>
+    </div>
     </div>
   );
 }

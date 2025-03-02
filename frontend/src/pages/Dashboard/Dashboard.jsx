@@ -40,7 +40,7 @@ const Dashboard = () => {
           console.error('Invalid stored token:', error);
         }
       } else {
-        navigate('/login');
+        navigate('/');
       }
     }
   }, [navigate]);
