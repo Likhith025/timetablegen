@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
-import API_BASE_URL from '../../src';
+import API_BASE_URL from '../../src.js';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -12,6 +12,8 @@ const Register = () => {
   const [error, setError] = useState('');
   const [showOtpField, setShowOtpField] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleSendOtp = async () => {
@@ -55,7 +57,7 @@ const Register = () => {
         throw new Error(data.message || 'Registration failed');
       }
       alert('Registration Successful!');
-      navigate('/dashboard');
+      navigate('/login');
     } catch (err) {
       setError(err.message);
     }
@@ -82,14 +84,59 @@ const Register = () => {
           <p>Email Id</p>
           <input type="text" placeholder="Email Id" className='label1' value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
+
+        {/* Password Field */}
         <div className="labeldiv">
           <p>Password</p>
-          <input type="password" placeholder="Password" className='label1' value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="password-container" style={{ position: 'relative' }}>
+            <input 
+              type={showPassword ? "text" : "password"} 
+              placeholder="Password" 
+              className='label1' 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+            />
+            <span 
+              onClick={() => setShowPassword(!showPassword)} 
+              style={{
+                position: 'absolute', 
+                right: '10px', 
+                top: '50%', 
+                transform: 'translateY(-50%)', 
+                cursor: 'pointer'
+              }}
+            >
+              {showPassword ? '🙈' : '👁'}
+            </span>
+          </div>
         </div>
+
+        {/* Confirm Password Field */}
         <div className="labeldiv">
           <p>Confirm Password</p>
-          <input type="password" placeholder="Confirm Password" className='label1' value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          <div className="password-container" style={{ position: 'relative' }}>
+            <input 
+              type={showConfirmPassword ? "text" : "password"} 
+              placeholder="Confirm Password" 
+              className='label1' 
+              value={confirmPassword} 
+              onChange={(e) => setConfirmPassword(e.target.value)} 
+            />
+            <span 
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)} 
+              style={{
+                position: 'absolute', 
+                right: '10px', 
+                top: '50%', 
+                transform: 'translateY(-50%)', 
+                cursor: 'pointer'
+              }}
+            >
+              {showConfirmPassword ? '🙈' : '👁'}
+            </span>
+          </div>
         </div>
+
         {!showOtpField && <button className="button1" onClick={handleSendOtp} disabled={!email}>Get OTP</button>}
         {showOtpField && (
           <>

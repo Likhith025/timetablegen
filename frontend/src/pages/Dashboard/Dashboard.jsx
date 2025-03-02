@@ -49,15 +49,18 @@ const Dashboard = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login'); // Redirect to login page
+    navigate('/'); // Redirect to login page
   };
 
   return (
     <div>
       <h1>Welcome, {userName || 'User'}!</h1>
       <p>We are coming soon!</p>
-      <button onClick={handleLogout} style={{ marginTop: '20px', padding: '10px 20px', cursor: 'pointer' }}>
+      <button onClick={handleLogout} className='button1'>
         Logout
+      </button>
+      <button onClick={() => navigate('/view')} className='button1'>
+        View all users
       </button>
     </div>
   );

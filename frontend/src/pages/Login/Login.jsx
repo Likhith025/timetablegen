@@ -7,6 +7,7 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false); // Track password visibility
   const navigate = useNavigate();
 
   const googleLogin = useGoogleLogin({
@@ -61,13 +62,27 @@ const Login = () => {
 
           <div className="labeldiv">
             <p>Password</p>
-            <input 
-              type="password" 
-              placeholder="Password" 
-              className='label1' 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-            />
+            <div className="password-container" style={{ position: 'relative' }}>
+              <input 
+                type={showPassword ? "text" : "password"} 
+                placeholder="Password" 
+                className='label1' 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+              />
+              <span 
+                onClick={() => setShowPassword(!showPassword)} 
+                style={{
+                  position: 'absolute', 
+                  right: '10px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)', 
+                  cursor: 'pointer'
+                }}
+              >
+                {showPassword ? '🙈' : '👁'} {/* Eye Toggle Icon */}
+              </span>
+            </div>
             <a 
               href="#" 
               className="forgotpassword" 
