@@ -10,15 +10,24 @@ Grouter.get("/google", googleAuth);
 
 // Google OAuth callback
 Grouter.get("/google/callback", passport.authenticate("google", { session: false }), (req, res) => {
-    if (!req.user) {
-      return res.redirect(`${process.env.CLIENT_URL}/login?error=GoogleAuthFailed`);
-    }
-  
-    const token = jwt.sign({ id: req.user._id, role: req.user.role }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-  
-    res.redirect(`${process.env.CLIENT_URL}/dashboard?token=${token}`);
+  if (!req.user) {
+    return res.redirect(`${process.env.CLIENT_URL}/login?error=GoogleAuthFailed`);
+  }
+
+  const tokenPayload = {
+    id: req.user._id,
+    role: req.user.role,
+    name: req.user.name,
+  };
+
+  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+  console.log("Generated Token:", {
+    token,
+    payload: tokenPayload
   });
-  
+
+  res.redirect(`${process.env.CLIENT_URL}/dashboard?token=${token}`);
+});
+
 export default Grouter;

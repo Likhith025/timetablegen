@@ -9,14 +9,12 @@ const Login = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  // Google Login function (Redirect-based)
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
-    ux_mode: 'redirect', // Forces redirect instead of popup
-    redirect_uri: `${API_BASE_URL}/auth/google/callback`, // Ensure backend handles this
+    ux_mode: 'redirect',
+    redirect_uri: `${API_BASE_URL}/auth/google/callback`,
   });
 
-  // Handle Email/Password Login
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
