@@ -21,13 +21,42 @@ a{
     color: black;
 }
 
-.loginpage {
-    position: absolute;
-    right: 15vw;
-    top: 10%;
-    transform: scale(1.2);
+.bgsetup {
+    position: fixed; /* Ensures full coverage */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    
+    background-image: url("./assets/bg.jpg"); /* Adjust the path */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+
+    overflow: hidden; /* Prevents white spaces */
 }
 
+.logo {
+    position: fixed;
+    top: 5px;
+    left: 80px;
+}
+
+.logo img {
+    width: 100px; /* Adjust size as needed */
+    height: auto; /* Maintain aspect ratio */
+    transform: scale(3);
+}
+
+
+.loginpage {
+    position: absolute;
+    top: 50%;
+    left: 75%;
+    transform: translate(-50%, -50%) scale(1.2); /* Centers the box */
+    width: fit-content; /* Adjusts width based on content */
+}
 @media (max-width: 1024px) { 
     .loginpage {
         right: 5vw; 

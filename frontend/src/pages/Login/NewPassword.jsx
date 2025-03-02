@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import API_BASE_URL from '../../src'; // Ensure correct API URL import
+import {assets} from '../../assets/assets.js'
 
 const NewPassword = () => {
   const location = useLocation();
@@ -49,6 +50,10 @@ const NewPassword = () => {
   };
 
   return (
+    <div className="bgsetup">
+    <div className="logo">
+      <img src={assets.logo} alt="" />
+    </div>
     <div className='loginpage'>
       <div className="box1">
         <h1>New Password</h1>
@@ -56,7 +61,7 @@ const NewPassword = () => {
         {/* Display OTP and Email */}
         <div className="info-box">
           <p><strong>Email:</strong> {email}</p>
-          <p><strong>OTP:</strong> {otp}</p>
+          {/*<p><strong>OTP:</strong> {otp}</p>*/}
         </div>
 
         {error && <p className="error">{error}</p>}
@@ -92,6 +97,7 @@ const NewPassword = () => {
           {loading ? 'Updating...' : 'Continue'}
         </button>
       </div>
+    </div>
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import API_BASE_URL from '../../src.js';
+import {assets} from '../../assets/assets.js'
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -44,6 +45,12 @@ const Login = () => {
   };
 
   return (
+<div 
+  className="bgsetup" 
+>
+  <div className="logo">
+    <img src={assets.logo} alt="" />
+  </div>
     <div className='loginpage'>
       <div className="box1">
         <h1>Log In</h1>
@@ -120,6 +127,7 @@ const Login = () => {
           </a>
         </p>
       </div>
+    </div>
     </div>
   );
 };
