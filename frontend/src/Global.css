@@ -37,13 +37,26 @@ a{
     overflow: hidden; /* Prevents white spaces */
 }
 
-.loginpage {
-    position: absolute;
-    right: 15vw;
-    top: 10%;
-    transform: scale(1.2);
+.logo {
+    position: fixed;
+    top: 5px;
+    left: 80px;
 }
 
+.logo img {
+    width: 100px; /* Adjust size as needed */
+    height: auto; /* Maintain aspect ratio */
+    transform: scale(3);
+}
+
+
+.loginpage {
+    position: absolute;
+    top: 50%;
+    left: 75%;
+    transform: translate(-50%, -50%) scale(1.2); /* Centers the box */
+    width: fit-content; /* Adjusts width based on content */
+}
 @media (max-width: 1024px) { 
     .loginpage {
         right: 5vw; 

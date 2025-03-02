@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import API_BASE_URL from '../../src';  // Ensure correct API URL import
+import {assets} from '../../assets/assets.js'
 
 const OTpass = () => {
   const location = useLocation();
@@ -78,6 +79,9 @@ const OTpass = () => {
 
   return (
     <div className="bgsetup">
+        <div className="logo">
+          <img src={assets.logo} alt="" />
+        </div>
     <div className='loginpage'>
       <div className="box1">
         <h1>Enter OTP</h1>

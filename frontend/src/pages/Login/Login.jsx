@@ -48,6 +48,9 @@ const Login = () => {
 <div 
   className="bgsetup" 
 >
+  <div className="logo">
+    <img src={assets.logo} alt="" />
+  </div>
     <div className='loginpage'>
       <div className="box1">
         <h1>Log In</h1>
