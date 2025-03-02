@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import API_BASE_URL from '../../src'; // Ensure correct API URL import
-import {assets} from '../../assets/assets.js'
+import API_BASE_URL from '../../src';
+import { assets } from '../../assets/assets.js';
 
 const NewPassword = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const email = location.state?.email || 'No email received';
-  const otp = location.state?.otp || 'No OTP received'; // Ensure OTP is passed from previous step
+  const otp = location.state?.otp || 'No OTP received';
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleResetPassword = async () => {
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+
     if (!newPassword || !confirmPassword) {
       setError('Please fill all fields');
       return;
@@ -51,53 +55,76 @@ const NewPassword = () => {
 
   return (
     <div className="bgsetup">
-    <div className="logo">
-      <img src={assets.logo} alt="" />
-    </div>
-    <div className='loginpage'>
-      <div className="box1">
-        <h1>New Password</h1>
-
-        {/* Display OTP and Email */}
-        <div className="info-box">
-          <p><strong>Email:</strong> {email}</p>
-          {/*<p><strong>OTP:</strong> {otp}</p>*/}
-        </div>
-
-        {error && <p className="error">{error}</p>}
-
-        <div className="labeldiv">
-          <p>Enter New Password</p>
-          <input 
-            type="password" 
-            placeholder="Enter New Password" 
-            className='label1' 
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-          />
-        </div>
-
-        <div className="labeldiv">
-          <p>Confirm New Password</p>
-          <input 
-            type="password" 
-            placeholder="Confirm New Password" 
-            className='label1' 
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
-        </div>
-
-        <br />
-        <button 
-          className="button1" 
-          onClick={handleResetPassword} 
-          disabled={loading}
-        >
-          {loading ? 'Updating...' : 'Continue'}
-        </button>
+      <div className="logo">
+        <img src={assets.logo} alt="Logo" />
       </div>
-    </div>
+      <div className="loginpage">
+        <div className="box1">
+          <h1>New Password</h1>
+          
+          {/* Display Email and OTP */}
+          <span><strong>Email:</strong> {email}</span>
+          {/*<span><strong>OTP:</strong> {otp}</span>*/}
+
+          {error && <p className="error">{error}</p>}
+          <form onSubmit={handleResetPassword}>
+            <div className="labeldiv">
+              <p>New Password</p>
+              <div className="password-container" style={{ position: 'relative' }}>
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="Enter New Password"
+                  className="label1"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <span
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {showNewPassword ? '🙈' : '👁'}
+                </span>
+              </div>
+            </div>
+
+            <div className="labeldiv">
+              <p>Confirm New Password</p>
+              <div className="password-container" style={{ position: 'relative' }}>
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Confirm New Password"
+                  className="label1"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                <span
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {showConfirmPassword ? '🙈' : '👁'}
+                </span>
+              </div>
+            </div>
+
+            <br />
+            <button type="submit" className="button1" disabled={loading}>
+              {loading ? 'Updating...' : 'Continue'}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };

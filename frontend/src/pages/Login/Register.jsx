@@ -13,6 +13,7 @@ const Register = () => {
   const [error, setError] = useState('');
   const [showOtpField, setShowOtpField] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ const Register = () => {
       return;
     }
     setError('');
+    setSendingOtp(true);
     try {
       const response = await fetch(`${API_BASE_URL}/user/regotp`, {
         method: 'POST',
@@ -38,6 +40,8 @@ const Register = () => {
       setOtpSent(true);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSendingOtp(false);
     }
   };
 
@@ -58,7 +62,7 @@ const Register = () => {
         throw new Error(data.message || 'Registration failed');
       }
       alert('Registration Successful!');
-      navigate('/login');
+      navigate('/');
     } catch (err) {
       setError(err.message);
     }
@@ -142,7 +146,7 @@ const Register = () => {
           </div>
         </div>
 
-        {!showOtpField && <button className="button1" onClick={handleSendOtp} disabled={!email}>Get OTP</button>}
+        {!showOtpField && <button className="button1" onClick={handleSendOtp} disabled={!email || sendingOtp}>{sendingOtp ? 'Sending OTP...' : 'Get OTP'}</button>}
         {showOtpField && (
           <>
             <div className="labeldiv">
@@ -152,7 +156,7 @@ const Register = () => {
             {otpSent && (
               <p className="resend-otp">
                 Didn't get OTP? 
-                <a href="#" onClick={(e) => { e.preventDefault(); handleSendOtp(); }} style={{ marginLeft: '5px', color: 'blue', cursor: 'pointer' }}>Resend OTP</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); handleSendOtp(); }}>Resend OTP</a>
               </p>
             )}
           </>
