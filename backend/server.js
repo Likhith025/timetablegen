@@ -10,7 +10,6 @@ dotenv.config();
 
 const app = express();
 
-// ✅ Corrected CORS Configuration
 app.use(
   cors({
     origin: ["http://localhost:5173", "https://timetablegen-production.up.railway.app"], 
@@ -20,7 +19,6 @@ app.use(
   })
 );
 
-// ✅ Ensure CORS Headers are Always Set
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -28,20 +26,18 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware
 app.use(express.json());
 
-// Connect Database
 connectDB()
-  .then(() => console.log("✅ MongoDB Connected"))
+  .then(() => console.log("MongoDB Connected"))
   .catch((error) => {
-    console.error("❌ MongoDB Connection Failed:", error.message);
+    console.error("MongoDB Connection Failed:", error.message);
     process.exit(1);
   });
 
 // Simple Route
 app.get("/", (req, res) => {
-  res.send("✅ API is Running...");
+  res.send("API is Running...");
 });
 
 // Routes
@@ -55,12 +51,12 @@ app.options("*", (req, res) => {
 
 // Global Error Handling Middleware
 app.use((err, req, res, next) => {
-  console.error("❌ Error:", err.message);
+  console.error("Error:", err.message);
   res.status(500).json({ message: "Internal Server Error", error: err.message });
 });
 
 // Dynamic Port for Deployment
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
