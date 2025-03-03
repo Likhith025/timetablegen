@@ -20,7 +20,7 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
-
+  
     try {
       const response = await fetch(`${API_BASE_URL}/user/login`, {
         method: 'POST',
@@ -28,22 +28,23 @@ const Login = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
+        credentials: "include", // ✅ Important to include cookies/sessions
       });
-
+  
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.message || 'Login failed');
       }
-
+  
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-
+  
       navigate('/dashboard');
     } catch (err) {
       setError(err.message);
     }
   };
-
+  
   return (
 <div 
   className="bgsetup" 

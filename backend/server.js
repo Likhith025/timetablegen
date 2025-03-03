@@ -10,8 +10,13 @@ dotenv.config();
 
 const app = express();
 
-// Simple CORS setup
-app.use(cors()); // Enables CORS for all requests
+// ✅ Fix: Set up CORS properly
+app.use(cors({
+  origin: "http://localhost:5173", // ✅ Allow frontend URL
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true, // ✅ Allow cookies/auth tokens
+}));
 
 app.use(express.json());
 
@@ -29,7 +34,14 @@ app.get("/", (req, res) => {
 app.use("/user", userRouter);
 app.use("/auth", Grouter);
 
-app.options("*", cors()); // Ensure preflight requests are handled
+// ✅ Fix: Ensure Preflight Requests (`OPTIONS`) Return CORS Headers
+app.options("*", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.sendStatus(200);
+});
 
 // Global Error Handling Middleware
 app.use((err, req, res, next) => {
