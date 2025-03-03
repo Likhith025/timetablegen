@@ -220,27 +220,34 @@ export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Fix: Await the database query
+        // Find the user in the database
         const user = await User.findOne({ email });
 
         if (!user) {
             return res.status(401).json({ message: "Invalid Email" });
         }
 
-        // Fix: Ensure `user.password` exists before comparing
+        // Check password (ensure user.password exists)
         const isMatch = await bcrypt.compare(password, user.password || "");
 
         if (!isMatch) {
             return res.status(401).json({ message: "Invalid Password" });
         }
 
-        // Fix: Correct typo (`iser.role` -> `user.role`)
+        // Generate JWT token
         const token = jwt.sign(
             { id: user._id, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: "7d" }
         );
 
+        // Set CORS Headers (Important for Preflight Requests)
+        res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173"); // Match frontend URL
+        res.setHeader("Access-Control-Allow-Credentials", "true"); // Allow cookies/sessions
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+        // Send response
         res.status(200).json({
             message: "Login successful",
             token,
@@ -253,6 +260,7 @@ export const login = async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({ message: "Invalid Credentials", error: error.message });
+        console.error("Login Error:", error.message);
+        res.status(500).json({ message: "Server Error", error: error.message });
     }
 };
