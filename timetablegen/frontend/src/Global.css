@@ -3,3 +3,73 @@
 And for buttons, the CSS will be in Button.css file
 
 */
+
+/* Hide arrows in WebKit browsers */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+
+body{
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+
+a{
+    color: black;
+}
+
+.bgsetup {
+    position: fixed; /* Ensures full coverage */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    
+    background-image: url("./assets/bg.jpg"); /* Adjust the path */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+
+    overflow: hidden; /* Prevents white spaces */
+}
+
+.logo {
+    position: fixed;
+    top: 5px;
+    left: 80px;
+}
+
+.logo img {
+    width: 100px; /* Adjust size as needed */
+    height: auto; /* Maintain aspect ratio */
+    transform: scale(3);
+}
+
+
+.loginpage {
+    position: absolute;
+    top: 50%;
+    left: 75%;
+    transform: translate(-50%, -50%) scale(1.2); /* Centers the box */
+    width: fit-content; /* Adjusts width based on content */
+}
+@media (max-width: 1024px) { 
+    .loginpage {
+        right: 5vw; 
+    }
+}
+
+@media (max-width: 768px) { 
+    .loginpage {
+        position: relative; 
+        right: auto; 
+        left: 50%;
+        transform: translateX(-50%) scale(1); 
+        width: 90%; 
+        max-width: 400px; 
+    }
+}

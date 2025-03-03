@@ -1,25 +1,35 @@
-import React from 'react'
+import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import './Button.css'
-import './Global.css'
-
+import { GoogleOAuthProvider } from '@react-oauth/google';
+import './Button.css';
+import './Global.css';
+import './LogIn.css';
+import './Input.css';
 
 import Login from './pages/Login/Login';
-import OTP from './pages/Login/OTP';
 import View from './pages/View';
-
+import Loader from './components/Loader';
+import Register from './pages/Login/Register';
+import NewPassword from './pages/Login/NewPassword';
+import OTpass from './pages/Login/OTpass';
+import Dashboard from './pages/Dashboard/Dashboard';
+import PageNot from './pages/PageNotFound/PageNot';
 
 const Paths = () => {
   return (
-    <div>
+    <GoogleOAuthProvider clientId="252303016884-ml8b3g00san0u75nuqtgf3ss8dr5kvkb.apps.googleusercontent.com">
       <Routes>
-
-        <Route path='/' element={<Login/>}/>
-        <Route path='/otp' element={<OTP/>}/>
-        <Route path='/view' element={<View/>}/>
+        <Route path="/" element={<Login />} />
+        <Route path="/view" element={<View />} />
+        <Route path="/loader" element={<Loader />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/newpassword" element={<NewPassword />} />
+        <Route path="/otp" element={<OTpass />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="*" element={<PageNot />} />
       </Routes>
-    </div>
-  )
-}
+    </GoogleOAuthProvider>
+  );
+};
 
-export default Paths
+export default Paths;
