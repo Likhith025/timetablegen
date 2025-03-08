@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import API_BASE_URL from '../../src';
 import { assets } from '../../assets/assets.js';
+import TopBar from '../../components/TopBar/TopBar.jsx';
 
 const NewPassword = () => {
   const location = useLocation();
@@ -15,6 +16,9 @@ const NewPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Check if token exists in localStorage
+  const tokenExists = !!localStorage.getItem("token");
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
@@ -55,16 +59,21 @@ const NewPassword = () => {
 
   return (
     <div className="bgsetup">
-      <div className="logo">
-        <img src={assets.logo} alt="Logo" />
-      </div>
+      {/* Show TopBar if token exists, else show logo */}
+      {tokenExists ? (
+        <TopBar />
+      ) : (
+        <div className="logo">
+          <img src={assets.logo} alt="Logo" />
+        </div>
+      )}
+
       <div className="loginpage">
         <div className="box1">
           <h1>New Password</h1>
-          
-          {/* Display Email and OTP */}
+
+          {/* Display Email */}
           <span><strong>Email:</strong> {email}</span>
-          {/*<span><strong>OTP:</strong> {otp}</span>*/}
 
           {error && <p className="error">{error}</p>}
           <form onSubmit={handleResetPassword}>

@@ -110,7 +110,7 @@ export const getUserById = async (req,res) => {
 
 export const editUser = async (req, res) => {
     try {
-        const { name, email, role= "user", loginType } = req.body;
+        const { name, email, role, loginType } = req.body;
 
         const updatedUser = await User.findByIdAndUpdate(
             req.params.id,
