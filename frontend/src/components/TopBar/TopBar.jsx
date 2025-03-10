@@ -120,7 +120,9 @@ const TopBar = () => {
           <p><strong>{userName || "User"}</strong></p>
           {userRole.toLowerCase() === "admin" && <p className="role">Admin</p>}
         </div>
-        <FaUserCircle className="user-icon" onClick={() => setDropdownOpen(!dropdownOpen)} />
+        <div className="user-avatar" onClick={() => setDropdownOpen(!dropdownOpen)}>
+  {userName ? userName.charAt(0).toUpperCase() : "U"}
+        </div>
 
         {dropdownOpen && (
           <div className="dropdown-menu">
