@@ -5,18 +5,21 @@ import userRouter from "./route/userRoute.js";
 import cors from "cors";
 import "./database/passport.js";
 import Grouter from "./route/googleRoute.js";
+import AllRouter from "./route/route.js";
 
 dotenv.config();
 
 const app = express();
 
-// ✅ Fix: Set up CORS properly
-app.use(cors({
-  origin: "http://localhost:5173", // ✅ Allow frontend URL
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true, // ✅ Allow cookies/auth tokens
-}));
+// Set up CORS with PATCH included
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Allow frontend URL
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // Include PATCH
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true, // Allow cookies/auth tokens
+  })
+);
 
 app.use(express.json());
 
@@ -31,17 +34,11 @@ app.get("/", (req, res) => {
   res.send("API is Running...");
 });
 
+// Routes
 app.use("/user", userRouter);
 app.use("/auth", Grouter);
-
-// ✅ Fix: Ensure Preflight Requests (`OPTIONS`) Return CORS Headers
-app.options("*", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.sendStatus(200);
-});
+app.use("/all", AllRouter);
+// Note: Ensure AllRouter defines PATCH /timetables/:projectId with the updateTimetable function
 
 // Global Error Handling Middleware
 app.use((err, req, res, next) => {

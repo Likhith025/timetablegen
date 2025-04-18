@@ -1,0 +1,176 @@
+.parameters-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 60px auto 0;
+  font-family: Arial, sans-serif;
+}
+
+.parameters-container h2 {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.section {
+  margin-bottom: 20px;
+  background: #f5f5f5;
+  padding: 15px;
+  border-radius: 5px;
+}
+
+.section h3 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.section p {
+  font-size: 16px;
+  color: #666;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background-color: #e0e0e0;
+  font-weight: bold;
+}
+
+td {
+  background-color: #fff;
+}
+
+td:not(.no-format)::before,
+td:not(.no-format)::after {
+  content: none !important; /* Prevent any pseudo-elements from adding $ */
+}
+
+input[type="text"],
+input[type="time"],
+select {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.multi-select {
+  width: 150px;
+  height: 100px;
+  padding: 5px;
+  border-radius: 4px;
+}
+
+input[type="checkbox"] {
+  margin: 0 5px 0 0;
+}
+
+.add-btn, .delete-btn {
+  background-color: #2196F3;
+  color: white;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+.delete-btn {
+  background-color: #f44336;
+  padding: 2px 8px;
+}
+
+.add-btn:hover, .delete-btn:hover {
+  opacity: 0.9;
+}
+
+.user-info {
+  background: #f0f8ff;
+}
+
+.user-info table {
+  width: auto;
+  border: none;
+}
+
+.user-info td {
+  border: none;
+  padding: 5px 10px;
+}
+
+.user-info-note {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+}
+
+.error {
+  color: red;
+  text-align: center;
+  font-size: 16px;
+}
+
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.edit-btn, .save-btn, .cancel-btn, .back-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  color: white;
+}
+
+.edit-btn {
+  background-color: #4CAF50;
+}
+
+.edit-btn:hover {
+  background-color: #45a049;
+}
+
+.save-btn {
+  background-color: #2196F3;
+}
+
+.save-btn:hover {
+  background-color: #1e88e5;
+}
+
+.save-btn:disabled {
+  background-color: #90caf9;
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  background-color: #f44336;
+}
+
+.cancel-btn:hover {
+  background-color: #e53935;
+}
+
+.back-btn {
+  background-color: #6a5acd;
+}
+
+.back-btn:hover {
+  background-color: #5a4aaf;
+}

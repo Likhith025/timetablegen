@@ -16,6 +16,8 @@ import Dashboard from './pages/Dashboard/Dashboard';
 import PageNot from './pages/PageNotFound/PageNot';
 import ProtectedRoute from './ProtectedRoute.jsx';
 import Profile from './pages/myProfile/Profile.jsx';
+import AddProject from './pages/AddProject/AddProject.jsx';
+import ProjectDashboard from './pages/ProjectDashboard/ProjectDashboard.jsx';
 
 const Paths = () => {
   return (
@@ -30,6 +32,9 @@ const Paths = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="*" element={<PageNot />} />
         <Route path="/profile" element={<Profile/>} />
+        <Route path="/addproject" element={<AddProject/>} />
+        <Route path="/timetable/:id" element={<ProjectDashboard/>} />
+    
       </Routes>
     </GoogleOAuthProvider>
   );

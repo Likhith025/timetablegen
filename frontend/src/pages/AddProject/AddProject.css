@@ -1,0 +1,219 @@
+.container {
+    width: 90%;
+    max-width: 800px;
+    background-color: #ffffff;
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+  }
+  
+  .progress-bar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 30px;
+  }
+  
+  .back-arrow {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s ease;
+    margin-right: 20px;
+    display: inline-flex;
+    align-items: center;
+  }
+  
+  .back-arrow:hover {
+    background-color: #0056b3;
+  }
+  
+  .steps {
+    display: flex;
+    justify-content: space-between;
+    width: 50%;
+    position: relative;
+  }
+  
+  .steps::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #e0e0e0;
+    z-index: 1;
+  }
+  
+  .step {
+    width: 30px;
+    height: 30px;
+    border: 2px solid #e0e0e0;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #ffffff;
+    color: #666;
+    font-weight: 600;
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+  }
+  
+  .step.active {
+    border-color: #007bff;
+    background-color: #007bff;
+    color: #ffffff;
+  }
+  
+  .form-container {
+    position: relative;
+  }
+  
+  .form-step {
+    background-color: #f9f9f9;
+    padding: 25px;
+    border-radius: 10px;
+    text-align: center;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  }
+  
+  h2 {
+    margin-bottom: 25px;
+    color: #333;
+    font-size: 24px;
+    font-weight: 600;
+  }
+  
+  input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+  }
+  
+  input:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    background-color: #fff;
+  }
+  
+  th, td {
+    border: 1px solid #e0e0e0;
+    padding: 12px;
+    text-align: left;
+    font-size: 14px;
+  }
+  
+  th {
+    background-color: #f0f0f0;
+    color: #444;
+    font-weight: 600;
+  }
+  
+  .next-btn {
+    background-color: #007bff;
+    color: white;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s ease;
+    margin-top: 20px;
+  }
+  
+  .next-btn:hover {
+    background-color: #0056b3;
+  }
+  
+  .add-btn, .select-btn, .download-btn {
+    background-color: #ffffff;
+    border: 1px solid #007bff;
+    color: #007bff;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin: 5px;
+    transition: all 0.3s ease;
+  }
+  
+  .add-btn:hover, .select-btn:hover, .download-btn:hover {
+    background-color: #007bff;
+    color: #ffffff;
+  }
+  
+  .add-btn:disabled {
+    background-color: #ccc;
+    border-color: #999;
+    color: #666;
+    cursor: not-allowed;
+  }
+  
+  .upload-btn {
+    background-color: #28a745;
+    color: white;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s ease;
+    margin: 5px;
+  }
+  
+  .upload-btn:hover {
+    background-color: #218838;
+  }
+  
+  .delete-btn {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s ease;
+  }
+  
+  .delete-btn:hover {
+    background-color: #c82333;
+  }
+
+  .form-step table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  .form-step th, .form-step td {
+    padding: 10px;
+    border: 1px solid #ddd;
+  }
+  
+  .form-step input[type="time"] {
+    width: 100%;
+    padding: 5px;
+  }
