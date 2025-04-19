@@ -1,0 +1,270 @@
+/* ChatbotInterface.css */
+
+.chatbot-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  
+  /* Toggle Button */
+  .chat-toggle-btn {
+    display: flex;
+    align-items: center;
+    background-color: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 30px;
+    padding: 12px 20px;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+  }
+  
+  .chat-toggle-btn:hover {
+    background-color: #165fc5;
+    transform: translateY(-2px);
+  }
+  
+  .chat-toggle-btn.open {
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+  }
+  
+  .toggle-icon {
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .toggle-label {
+    margin-left: 8px;
+    font-weight: 500;
+  }
+  
+  /* Chat Panel */
+  .chat-panel {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 350px;
+    height: 500px;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateY(20px);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+  }
+  
+  .chat-panel.open {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+  
+  .chat-header {
+    background-color: #1a73e8;
+    color: white;
+    padding: 15px 20px;
+    font-weight: bold;
+  }
+  
+  .chat-header h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+  
+  .chat-messages {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    background-color: #f8f9fa;
+  }
+  
+  .message {
+    display: flex;
+    flex-direction: column;
+    max-width: 80%;
+  }
+  
+  .message.user {
+    align-self: flex-end;
+  }
+  
+  .message.bot {
+    align-self: flex-start;
+  }
+  
+  .message-bubble {
+    padding: 12px 16px;
+    border-radius: 18px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  
+  .message.user .message-bubble {
+    background-color: #1a73e8;
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  
+  .message.bot .message-bubble {
+    background-color: white;
+    color: #202124;
+    border: 1px solid #e0e0e0;
+    border-bottom-left-radius: 4px;
+  }
+  
+  .chat-input {
+    display: flex;
+    padding: 12px;
+    background-color: white;
+    border-top: 1px solid #f0f0f0;
+  }
+  
+  .chat-input input {
+    flex: 1;
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: 24px;
+    font-size: 14px;
+    outline: none;
+  }
+  
+  .chat-input input:focus {
+    border-color: #1a73e8;
+  }
+  
+  .chat-input button {
+    background-color: transparent;
+    color: #1a73e8;
+    border: none;
+    margin-left: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+  }
+  
+  .chat-input button:hover {
+    color: #165fc5;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 480px) {
+    .chat-panel {
+      width: calc(100vw - 40px);
+      height: 60vh;
+      right: 10px;
+      bottom: 70px;
+    }
+    
+    .chat-toggle-btn {
+      right: 10px;
+      bottom: 10px;
+    }
+  }
+
+  /* Add this to your existing ChatbotInterface.css file */
+
+.loading-icon {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+  font-size: 18px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Make sure newlines in messages display properly */
+.message-bubble {
+  white-space: pre-line;
+}
+
+/* Styling for proposed changes display */
+.message-bubble ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.message-bubble li {
+  margin-bottom: 4px;
+}
+
+/* Adjust button styles for disabled state */
+.chat-input button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.timetable-info {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin-top: 4px;
+}
+
+.timetable-info.error {
+  color: #f44336;
+}
+
+.chat-header {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background-color: #4b6cb7;
+  color: white;
+  border-radius: 12px 12px 0 0;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.chat-header h3 {
+  margin: 0;
+}
+
+.chat-header .timetable-info {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.export-btn {
+  background-color: white;
+  color: #4b6cb7;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin-left: auto;
+  margin-right: 0;
+  transition: background-color 0.2s ease;
+}
+
+.export-btn:hover {
+  background-color: #e0e0e0;
+}

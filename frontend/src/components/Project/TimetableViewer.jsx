@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import API_BASE_URL from '../../src'; // Adjust path as needed
 import './TimetableViewer.css';
+import ChatbotInterface from '../ChatBot/ChatbotInterface';
 
 const TimetableViewer = () => {
   const { id } = useParams();
@@ -205,6 +206,12 @@ const TimetableViewer = () => {
     return timetableData.faculty.find(f => f.id === facultyId);
   };
 
+  // Check if a class represents a free period
+  const isFreePeriod = (classItem) => {
+    if (!classItem || !classItem.subject) return false;
+    return classItem.subject.toLowerCase().includes('free period');
+  };
+
   // Render the timetable grid
   const renderTimetableGrid = () => {
     const schedule = getScheduleForSelectedItem();
@@ -250,10 +257,23 @@ const TimetableViewer = () => {
                     item => item.timeSlot === timeSlot
                   ) || [];
 
-                  if (classesForTimeSlot.length > 0) {
+                  // Check if all classes in this timeslot are free periods
+                  const allFreePeriods = classesForTimeSlot.length > 0 && 
+                                     classesForTimeSlot.every(item => 
+                                     isFreePeriod(item) || item.subject === "Free Period");
+                  
+                  if (allFreePeriods) {
+                    // Render an empty cell for free periods
+                    return <td key={timeSlot} className="empty-cell"></td>;
+                  } else if (classesForTimeSlot.length > 0) {
                     return (
                       <td key={timeSlot} className="class-cell">
                         {classesForTimeSlot.map((item, index) => {
+                          // Skip rendering free periods
+                          if (isFreePeriod(item) || item.subject === "Free Period") {
+                            return null;
+                          }
+                          
                           const subject = findSubjectByCode(item.subject);
                           const faculty = findFacultyById(item.faculty);
 
@@ -302,6 +322,7 @@ const TimetableViewer = () => {
 
   return (
     <div className="timetable-viewer">
+      <ChatbotInterface/>
       <div className="viewer-header">
         <h2>Timetable Viewer</h2>
         <div className="view-mode-selector">

@@ -1,4 +1,4 @@
-.timetable-page {
+.timetable-viewer {
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -140,7 +140,7 @@
   font-weight: 600;
 }
 
-.timetable-grid .time-cell {
+.timetable-grid .day-cell {
   background-color: #f9f9f9;
   font-weight: 500;
   white-space: nowrap;
@@ -159,6 +159,12 @@
   justify-content: space-between;
 }
 
+/* Free period styling - empty white cell */
+.timetable-grid .free-period {
+  background-color: white;
+  min-height: 110px;
+}
+
 .timetable-grid .class-cell .teacher {
   font-weight: 500;
   margin-bottom: 4px;
@@ -173,7 +179,7 @@
   order: 1;
 }
 
-.timetable-grid .class-cell .room-info {
+.timetable-grid .class-cell .room {
   font-size: 0.85em;
   color: #555;
   order: 0;
@@ -187,14 +193,8 @@
 }
 
 .timetable-grid .empty-cell {
-  background-color: #f9f9f9;
-  color: #ccc;
-}
-
-.timetable-grid .placeholder-message {
-  padding: 30px;
-  color: #888;
-  font-style: italic;
+  background-color: white;
+  color: transparent;
 }
 
 .empty-schedule {

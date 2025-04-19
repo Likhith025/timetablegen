@@ -838,6 +838,7 @@ function generateTimetableSchedule(timetableData) {
     version: "1.0"
   };
 }
+
 export const saveGenerationResults = async (req, res) => {
   try {
     const { timetableId } = req.params;
@@ -1079,5 +1080,1412 @@ export const getTimetableById = async (req, res) => {
     }
     
     res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+
+//////
+
+import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * Process a natural language request and return proposed changes
+ * @param {Object} req - Request object containing projectId and userMessage
+ * @param {Object} res - Response object
+ */
+export const processRequest = async (req, res) => {
+  try {
+    const { projectId, userMessage } = req.body;
+
+    if (!projectId || !userMessage) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required parameters: projectId and userMessage are required."
+      });
+    }
+
+    // 1. Fetch the current timetable data
+    const timetable = await Timetable.findById(projectId);
+    if (!timetable) {
+      return res.status(404).json({
+        success: false,
+        message: "Timetable project not found"
+      });
+    }
+
+    // 2. Process the natural language request using pattern matching
+    const requestAnalysis = analyzeRequest(userMessage, timetable);
+    
+    if (!requestAnalysis.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: requestAnalysis.message 
+      });
+    }
+
+    // 3. Generate proposed changes based on the request analysis
+    const proposedChanges = generateProposedChanges(requestAnalysis, timetable);
+    
+    // 4. Return the proposed changes for frontend approval
+    return res.status(200).json({
+      success: true,
+      message: requestAnalysis.response,
+      proposedChanges: proposedChanges,
+      changeId: uuidv4() // Unique ID to track this change request
+    });
+  } catch (error) {
+    console.error("Error processing timetable request:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to process your request. Please try again.",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Apply approved changes to the timetable
+ * @param {Object} req - Request object containing projectId, changeId, and approvedChanges
+ * @param {Object} res - Response object
+ */
+export const applyChanges = async (req, res) => {
+  try {
+    const { projectId, changeId, approvedChanges } = req.body;
+
+    if (!projectId || !changeId || !approvedChanges) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required parameters: projectId, changeId, and approvedChanges are required."
+      });
+    }
+
+    // 1. Fetch the current timetable data
+    const timetable = await Timetable.findById(projectId);
+    if (!timetable) {
+      return res.status(404).json({
+        success: false,
+        message: "Timetable project not found"
+      });
+    }
+    
+    // 2. Apply the database operation based on the change
+    const { changeType, entityType, collectionPath, currentState, newState } = approvedChanges;
+    
+    let updateOperation = {};
+    let updateResult = null;
+    
+    switch (changeType) {
+      case 'add':
+        // Add a new item to the collection
+        updateOperation = { 
+          $push: { [collectionPath]: newState } 
+        };
+        break;
+        
+      case 'modify':
+        // Find and update the existing item
+        if (!currentState || !currentState._id) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Cannot find ${entityType} to update` 
+          });
+        }
+        
+        // For each field in newState, create an update operation
+        updateOperation = { $set: {} };
+        Object.entries(newState).forEach(([key, value]) => {
+          if (key !== '_id') {
+            updateOperation.$set[`${collectionPath}.$[elem].${key}`] = value;
+          }
+        });
+        
+        updateResult = await Timetable.updateOne(
+          { _id: projectId },
+          updateOperation,
+          { 
+            arrayFilters: [{ "elem._id": currentState._id }],
+            new: true 
+          }
+        );
+        break;
+        
+      case 'delete':
+        // Remove the item from the collection
+        if (!currentState || !currentState._id) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Cannot find ${entityType} to delete` 
+          });
+        }
+        
+        updateOperation = { 
+          $pull: { [collectionPath]: { _id: currentState._id } } 
+        };
+        break;
+        
+      default:
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid change type" 
+        });
+    }
+    
+    // If we haven't executed an update yet (for 'add' and 'delete' operations)
+    if (!updateResult) {
+      updateResult = await Timetable.updateOne(
+        { _id: projectId },
+        updateOperation
+      );
+    }
+    
+    if (updateResult.modifiedCount === 0) {
+      return res.status(200).json({
+        success: false,
+        message: "No changes were applied to the timetable",
+        details: updateResult
+      });
+    }
+    
+    // 3. Retrieve the updated timetable data
+    const updatedTimetable = await Timetable.findById(projectId);
+    
+    // 4. Generate a new timetable schedule if necessary
+    let generatedResult = null;
+    if (shouldRegenerateSchedule(entityType, changeType)) {
+      try {
+        // Note: This function should be imported from your timetable generation module
+        // For now, we'll just note that regeneration would happen here
+        console.log("Would regenerate timetable schedule here");
+        // generatedResult = generateTimetableSchedule(updatedTimetable);
+      } catch (generationError) {
+        console.error("Error regenerating timetable schedule:", generationError);
+        // Continue with the response, but note the generation error
+      }
+    }
+    
+    // 5. Return success response with before/after details
+    return res.status(200).json({
+      success: true,
+      message: `Successfully ${changeType === 'add' ? 'added' : changeType === 'modify' ? 'updated' : 'deleted'} the ${entityType}`,
+      details: {
+        before: timetable,
+        after: updatedTimetable,
+        changeType,
+        entityType,
+        changeId,
+        scheduleRegenerated: generatedResult !== null,
+        generationResult: generatedResult
+      }
+    });
+  } catch (error) {
+    console.error("Error applying timetable changes:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Failed to apply changes to the timetable.", 
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Determine if schedule should be regenerated based on entity type and change type
+ * @param {String} entityType - Type of entity changed
+ * @param {String} changeType - Type of change made
+ * @returns {Boolean} - Whether schedule should be regenerated
+ */
+const shouldRegenerateSchedule = (entityType, changeType) => {
+  // Schedule should be regenerated for most changes except minor cosmetic ones
+  if (changeType === 'add' || changeType === 'delete') {
+    return true;
+  }
+  
+  // For modifications, regenerate only if they impact scheduling
+  if (entityType === 'timeSlot' || entityType === 'subject' || entityType === 'grade') {
+    return true;
+  }
+  
+  return false;
+};
+
+/**
+ * Analyze the user's natural language request using pattern matching
+ * @param {String} message - User's message
+ * @param {Object} timetable - Current timetable data
+ * @returns {Object} - Analysis of the request
+ */
+const analyzeRequest = (message, timetable) => {
+  const lowercaseMsg = message.toLowerCase();
+  
+  // Detect operation type (add, update, delete)
+  let changeType = '';
+  if (lowercaseMsg.includes('add') || lowercaseMsg.includes('create') || lowercaseMsg.includes('new')) {
+    changeType = 'add';
+  } else if (lowercaseMsg.includes('change') || lowercaseMsg.includes('update') || lowercaseMsg.includes('modify')) {
+    changeType = 'modify';
+  } else if (lowercaseMsg.includes('delete') || lowercaseMsg.includes('remove')) {
+    changeType = 'delete';
+  } else {
+    return { 
+      success: false, 
+      message: "I couldn't determine if you want to add, modify, or delete something. Please be more specific." 
+    };
+  }
+  
+  // Detect entity type (class, faculty, subject, timeSlot, grade)
+  let entityType = '';
+  if (lowercaseMsg.includes('class') || lowercaseMsg.includes('room')) {
+    entityType = 'class';
+  } else if (lowercaseMsg.includes('teacher') || lowercaseMsg.includes('faculty')) {
+    entityType = 'faculty';
+  } else if (lowercaseMsg.includes('subject') || lowercaseMsg.includes('course')) {
+    entityType = 'subject';
+  } else if (lowercaseMsg.includes('time') || lowercaseMsg.includes('slot') || lowercaseMsg.includes('schedule')) {
+    entityType = 'timeSlot';
+  } else if (lowercaseMsg.includes('grade') || lowercaseMsg.includes('section')) {
+    entityType = 'grade';
+  } else {
+    return { 
+      success: false, 
+      message: "I couldn't determine what you want to modify (class, faculty, subject, time slot, or grade). Please be more specific." 
+    };
+  }
+  
+  // Extract entity identifier and changes
+  const entityInfo = extractEntityInfo(message, entityType, changeType, timetable);
+  if (!entityInfo.success) {
+    return entityInfo;
+  }
+  
+  // Generate human-readable response
+  const response = `I understand you want to ${changeType} a ${entityType}: ${entityInfo.description}. Please review the changes before confirming.`;
+  
+  return {
+    success: true,
+    changeType,
+    entityType,
+    entityIdentifier: entityInfo.identifier,
+    changes: entityInfo.changes,
+    potentialConflicts: detectPotentialConflicts(entityType, entityInfo.changes, timetable),
+    response,
+    description: entityInfo.description
+  };
+};
+
+/**
+ * Extract entity information from the message
+ * @param {String} message - User message
+ * @param {String} entityType - Type of entity
+ * @param {String} changeType - Type of change
+ * @param {Object} timetable - Timetable data
+ * @returns {Object} - Entity identifier and changes
+ */
+const extractEntityInfo = (message, entityType, changeType, timetable) => {
+  const words = message.split(/\s+/);
+  
+  switch (entityType) {
+    case 'class':
+      return extractClassInfo(message, words, changeType, timetable);
+    
+    case 'faculty':
+      return extractFacultyInfo(message, words, changeType, timetable);
+    
+    case 'subject':
+      return extractSubjectInfo(message, words, changeType, timetable);
+    
+    case 'timeSlot':
+      return extractTimeSlotInfo(message, words, changeType, timetable);
+    
+    case 'grade':
+      return extractGradeInfo(message, words, changeType, timetable);
+    
+    default:
+      return { 
+        success: false, 
+        message: "Unable to extract the necessary information. Please provide more details." 
+      };
+  }
+};
+
+/**
+ * Extract class information
+ */
+const extractClassInfo = (message, words, changeType, timetable) => {
+  // Extract room number
+  const roomMatch = message.match(/room\s+([A-Za-z0-9-]+)/i);
+  const roomIdentifier = roomMatch ? roomMatch[1] : null;
+  
+  // Extract building
+  const buildingMatch = message.match(/building\s+([A-Za-z0-9-]+)/i);
+  const building = buildingMatch ? buildingMatch[1] : null;
+  
+  // Extract capacity
+  const capacityMatch = message.match(/capacity\s+(\d+)/i);
+  const capacity = capacityMatch ? capacityMatch[1] : null;
+  
+  if (changeType === 'add' && (!roomIdentifier || !capacity)) {
+    return {
+      success: false,
+      message: "To add a class, please specify both room number and capacity."
+    };
+  }
+  
+  if ((changeType === 'modify' || changeType === 'delete') && !roomIdentifier) {
+    return {
+      success: false,
+      message: "Please specify which room you want to modify or delete."
+    };
+  }
+  
+  // For modify and delete, check if the class exists
+  if ((changeType === 'modify' || changeType === 'delete') && roomIdentifier) {
+    const classExists = timetable.classes.some(c => c.room === roomIdentifier);
+    if (!classExists) {
+      return {
+        success: false,
+        message: `Room ${roomIdentifier} doesn't exist in the timetable.`
+      };
+    }
+  }
+  
+  // Prepare changes object
+  const changes = {};
+  if (building) changes.building = building;
+  if (capacity) changes.capacity = capacity;
+  if (roomIdentifier) changes.room = roomIdentifier;
+  
+  // Create description
+  let description = '';
+  if (changeType === 'add') {
+    description = `Add room ${roomIdentifier}${building ? ' in ' + building : ''}${capacity ? ' with capacity ' + capacity : ''}`;
+  } else if (changeType === 'modify') {
+    description = `Update room ${roomIdentifier}${building ? ' to building ' + building : ''}${capacity ? ' with new capacity ' + capacity : ''}`;
+  } else {
+    description = `Delete room ${roomIdentifier}`;
+  }
+  
+  return {
+    success: true,
+    identifier: roomIdentifier,
+    changes,
+    description
+  };
+};
+
+/**
+ * Extract faculty information
+ */
+const extractFacultyInfo = (message, words, changeType, timetable) => {
+  // Extract faculty name
+  const nameMatch = message.match(/name\s+([A-Za-z\s.]+)(?:,|\s|$)/i);
+  const name = nameMatch ? nameMatch[1].trim() : null;
+  
+  // Extract faculty ID
+  const idMatch = message.match(/id\s+([A-Za-z0-9-]+)/i);
+  const id = idMatch ? idMatch[1] : null;
+  
+  // Extract email
+  const emailMatch = message.match(/(?:email|mail)\s+([^\s,]+@[^\s,]+)/i);
+  const email = emailMatch ? emailMatch[1] : null;
+  
+  if (changeType === 'add' && (!name || !id)) {
+    return {
+      success: false,
+      message: "To add a faculty member, please specify both name and ID."
+    };
+  }
+  
+  if ((changeType === 'modify' || changeType === 'delete') && (!name && !id)) {
+    return {
+      success: false,
+      message: "Please specify which faculty member you want to modify or delete by name or ID."
+    };
+  }
+  
+  // For modify and delete, check if the faculty exists
+  if ((changeType === 'modify' || changeType === 'delete') && (name || id)) {
+    const facultyExists = timetable.faculty.some(f => 
+      (name && f.name === name) || (id && f.id === id)
+    );
+    
+    if (!facultyExists) {
+      return {
+        success: false,
+        message: `Faculty member ${name || id} doesn't exist in the timetable.`
+      };
+    }
+  }
+  
+  // Prepare changes object
+  const changes = {};
+  if (name) changes.name = name;
+  if (id) changes.id = id;
+  if (email) changes.mail = email;
+  
+  // Create description
+  let description = '';
+  if (changeType === 'add') {
+    description = `Add faculty ${name || ''} with ID ${id || ''}${email ? ' and email ' + email : ''}`;
+  } else if (changeType === 'modify') {
+    description = `Update faculty ${name || id}${email ? ' with new email ' + email : ''}`;
+  } else {
+    description = `Delete faculty ${name || id}`;
+  }
+  
+  return {
+    success: true,
+    identifier: name || id,
+    changes,
+    description
+  };
+};
+
+/**
+ * Extract subject information
+ */
+const extractSubjectInfo = (message, words, changeType, timetable) => {
+  // Extract subject code
+  const codeMatch = message.match(/code\s+([A-Za-z0-9-]+)/i);
+  const code = codeMatch ? codeMatch[1] : null;
+  
+  // Extract subject name
+  const subjectMatch = message.match(/subject\s+([A-Za-z\s0-9]+)(?:,|\s|$)/i);
+  const subject = subjectMatch ? subjectMatch[1].trim() : null;
+  
+  // Extract classes per week
+  const classesWeekMatch = message.match(/classes\s+per\s+week\s+(\d+)/i);
+  const classesWeek = classesWeekMatch ? classesWeekMatch[1] : null;
+  
+  // Extract if combined
+  const isCombined = message.toLowerCase().includes('combined');
+  
+  if (changeType === 'add' && (!code || !subject)) {
+    return {
+      success: false,
+      message: "To add a subject, please specify both code and subject name."
+    };
+  }
+  
+  if ((changeType === 'modify' || changeType === 'delete') && (!code && !subject)) {
+    return {
+      success: false,
+      message: "Please specify which subject you want to modify or delete by code or name."
+    };
+  }
+  
+  // For modify and delete, check if the subject exists
+  if ((changeType === 'modify' || changeType === 'delete') && (code || subject)) {
+    const subjectExists = timetable.subjects.some(s => 
+      (code && s.code === code) || (subject && s.subject === subject)
+    );
+    
+    if (!subjectExists) {
+      return {
+        success: false,
+        message: `Subject ${subject || code} doesn't exist in the timetable.`
+      };
+    }
+  }
+  
+  // Prepare changes object
+  const changes = {};
+  if (code) changes.code = code;
+  if (subject) changes.subject = subject;
+  if (classesWeek) changes.classesWeek = classesWeek;
+  if (message.includes('combined')) changes.isCombined = true;
+  
+  // For add operation, initialize gradeSections as empty array
+  if (changeType === 'add') {
+    changes.gradeSections = [];
+    changes.facultyIds = [];
+    changes.assignedClasses = [];
+  }
+  
+  // Create description
+  let description = '';
+  if (changeType === 'add') {
+    description = `Add subject ${subject || ''} with code ${code || ''}${classesWeek ? ', ' + classesWeek + ' classes per week' : ''}${isCombined ? ', combined' : ''}`;
+  } else if (changeType === 'modify') {
+    description = `Update subject ${subject || code}${classesWeek ? ' to have ' + classesWeek + ' classes per week' : ''}${isCombined ? ', set as combined' : ''}`;
+  } else {
+    description = `Delete subject ${subject || code}`;
+  }
+  
+  return {
+    success: true,
+    identifier: code || subject,
+    changes,
+    description
+  };
+};
+
+/**
+ * Extract time slot information
+ */
+const extractTimeSlotInfo = (message, words, changeType, timetable) => {
+  // Extract day
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  let day = null;
+  
+  for (const possibleDay of days) {
+    if (message.toLowerCase().includes(possibleDay)) {
+      day = possibleDay.charAt(0).toUpperCase() + possibleDay.slice(1);
+      break;
+    }
+  }
+  
+  // Extract start time
+  const startTimeMatch = message.match(/(?:start|from)\s+(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i);
+  let startTime = startTimeMatch ? startTimeMatch[1] : null;
+  
+  // Extract end time
+  const endTimeMatch = message.match(/(?:end|to)\s+(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)/i);
+  let endTime = endTimeMatch ? endTimeMatch[1] : null;
+  
+  // Extract applicable to (grades/sections)
+  const applicableToMatch = message.match(/applicable\s+to\s+([A-Za-z0-9,-\s]+)/i);
+  const applicableTo = applicableToMatch ? 
+    applicableToMatch[1].split(',').map(item => item.trim()) : 
+    [];
+  
+  if (changeType === 'add' && (!day || !startTime || !endTime)) {
+    return {
+      success: false,
+      message: "To add a time slot, please specify day, start time, and end time."
+    };
+  }
+  
+  if ((changeType === 'modify' || changeType === 'delete') && (!day || (!startTime && !endTime))) {
+    return {
+      success: false,
+      message: "Please specify which time slot you want to modify or delete with day and at least start or end time."
+    };
+  }
+  
+  // Standardize time format if needed
+  if (startTime) {
+    // Convert to 24-hour format if needed
+    if (startTime.toLowerCase().includes('pm') && !startTime.startsWith('12')) {
+      const hourPart = parseInt(startTime.split(':')[0]);
+      startTime = `${hourPart + 12}:${startTime.includes(':') ? startTime.split(':')[1].replace(/[ap]m/i, '') : '00'}`;
+    } else {
+      startTime = startTime.replace(/[ap]m/i, '');
+      if (!startTime.includes(':')) {
+        startTime = `${startTime}:00`;
+      }
+    }
+  }
+  
+  if (endTime) {
+    // Convert to 24-hour format if needed
+    if (endTime.toLowerCase().includes('pm') && !endTime.startsWith('12')) {
+      const hourPart = parseInt(endTime.split(':')[0]);
+      endTime = `${hourPart + 12}:${endTime.includes(':') ? endTime.split(':')[1].replace(/[ap]m/i, '') : '00'}`;
+    } else {
+      endTime = endTime.replace(/[ap]m/i, '');
+      if (!endTime.includes(':')) {
+        endTime = `${endTime}:00`;
+      }
+    }
+  }
+  
+  // For modify and delete, check if the time slot exists
+  if ((changeType === 'modify' || changeType === 'delete') && day) {
+    const timeSlotExists = timetable.timeSlots.some(t => 
+      t.day === day && 
+      ((startTime && t.startTime === startTime) || (endTime && t.endTime === endTime))
+    );
+    
+    if (!timeSlotExists) {
+      return {
+        success: false,
+        message: `Time slot for ${day} at ${startTime || endTime} doesn't exist in the timetable.`
+      };
+    }
+  }
+  
+  // Prepare changes object
+  const changes = {};
+  if (day) changes.day = day;
+  if (startTime) changes.startTime = startTime;
+  if (endTime) changes.endTime = endTime;
+  if (applicableTo.length > 0) changes.applicableTo = applicableTo;
+  
+  // Create identifier for timeSlot (day + time)
+  const identifier = `${day} ${startTime}-${endTime}`;
+  
+  // Create description
+  let description = '';
+  if (changeType === 'add') {
+    description = `Add time slot on ${day} from ${startTime} to ${endTime}${applicableTo.length > 0 ? ' applicable to ' + applicableTo.join(', ') : ''}`;
+  } else if (changeType === 'modify') {
+    description = `Update time slot on ${day}${startTime ? ' starting at ' + startTime : ''}${endTime ? ' ending at ' + endTime : ''}${applicableTo.length > 0 ? ' to be applicable to ' + applicableTo.join(', ') : ''}`;
+  } else {
+    description = `Delete time slot on ${day}${startTime ? ' starting at ' + startTime : ''}${endTime ? ' ending at ' + endTime : ''}`;
+  }
+  
+  return {
+    success: true,
+    identifier,
+    changes,
+    description
+  };
+};
+
+/**
+ * Extract grade information
+ */
+const extractGradeInfo = (message, words, changeType, timetable) => {
+  // Extract grade
+  const gradeMatch = message.match(/grade\s+([A-Za-z0-9-]+)/i);
+  const grade = gradeMatch ? gradeMatch[1] : null;
+  
+  // Extract section
+  const sectionMatch = message.match(/section\s+([A-Za-z0-9-]+)/i);
+  const section = sectionMatch ? sectionMatch[1] : null;
+  
+  // Extract strength
+  const strengthMatch = message.match(/strength\s+(\d+)/i);
+  const strength = strengthMatch ? strengthMatch[1] : null;
+  
+  // Extract class assignment type
+  const classAssignmentType = message.toLowerCase().includes('same class') ? 'same' : 
+                             message.toLowerCase().includes('any class') ? 'any' : null;
+  
+  if (changeType === 'add' && (!grade || !section)) {
+    return {
+      success: false,
+      message: "To add a grade, please specify both grade and section."
+    };
+  }
+  
+  if ((changeType === 'modify' || changeType === 'delete') && (!grade || !section)) {
+    return {
+      success: false,
+      message: "Please specify which grade-section you want to modify or delete."
+    };
+  }
+  
+  // For modify and delete, check if the grade exists
+  if ((changeType === 'modify' || changeType === 'delete') && grade && section) {
+    const gradeExists = timetable.grades.some(g => 
+      g.grade === grade && g.section === section
+    );
+    
+    if (!gradeExists) {
+      return {
+        success: false,
+        message: `Grade ${grade} section ${section} doesn't exist in the timetable.`
+      };
+    }
+  }
+  
+  // Prepare changes object
+  const changes = {};
+  if (grade) changes.grade = grade;
+  if (section) changes.section = section;
+  if (strength) changes.strength = strength;
+  if (classAssignmentType) changes.classAssignmentType = classAssignmentType;
+  
+  // Create identifier
+  const identifier = `${grade}-${section}`;
+  
+  // Create description
+  let description = '';
+  if (changeType === 'add') {
+    description = `Add grade ${grade} section ${section}${strength ? ' with strength ' + strength : ''}${classAssignmentType ? ' using ' + classAssignmentType + ' class assignment' : ''}`;
+  } else if (changeType === 'modify') {
+    description = `Update grade ${grade} section ${section}${strength ? ' to strength ' + strength : ''}${classAssignmentType ? ' using ' + classAssignmentType + ' class assignment' : ''}`;
+  } else {
+    description = `Delete grade ${grade} section ${section}`;
+  }
+  
+  return {
+    success: true,
+    identifier,
+    changes,
+    description
+  };
+};
+
+/**
+ * Generate proposed changes based on analysis
+ * @param {Object} analysis - Analysis from pattern matching
+ * @param {Object} timetable - Current timetable
+ * @returns {Object} - Detailed proposed changes
+ */
+const generateProposedChanges = (analysis, timetable) => {
+  const { changeType, entityType, entityIdentifier, changes } = analysis;
+  
+  // Deep clone the relevant part of the timetable to show changes
+  let currentState = null;
+  let newState = null;
+  let collectionPath = '';
+  
+  switch (entityType) {
+    case 'class':
+      collectionPath = 'classes';
+      currentState = timetable.classes.find(c => c.room === entityIdentifier);
+      break;
+    case 'faculty':
+      collectionPath = 'faculty';
+      currentState = timetable.faculty.find(f => 
+        f.id === entityIdentifier || f.name === entityIdentifier
+      );
+      break;
+    case 'subject':
+      collectionPath = 'subjects';
+      currentState = timetable.subjects.find(s => 
+        s.code === entityIdentifier || s.subject === entityIdentifier
+      );
+      break;
+    case 'timeSlot':
+      collectionPath = 'timeSlots';
+      const [day, times] = entityIdentifier.split(' ');
+      const [startTime, endTime] = times ? times.split('-') : [null, null];
+      
+      currentState = timetable.timeSlots.find(t => 
+        t.day === day && 
+        (startTime ? t.startTime === startTime : true) && 
+        (endTime ? t.endTime === endTime : true)
+      );
+      break;
+    case 'grade':
+      collectionPath = 'grades';
+      const [grade, section] = entityIdentifier.split('-');
+      currentState = timetable.grades.find(g => 
+        g.grade === grade && g.section === section
+      );
+      break;
+  }
+  
+  // Create new state based on change type
+  if (changeType === 'add') {
+    newState = changes;
+  } else if (changeType === 'modify' && currentState) {
+    newState = { ...JSON.parse(JSON.stringify(currentState)), ...changes };
+  } 
+  // For 'delete', newState remains null
+  
+  return {
+    changeType,
+    entityType,
+    entityIdentifier,
+    collectionPath,
+    currentState,
+    newState,
+    potentialConflicts: analysis.potentialConflicts || [],
+    databaseOperation: generateDatabaseOperation(
+      changeType, 
+      entityType, 
+      entityIdentifier, 
+      changes, 
+      collectionPath,
+      currentState
+    )
+  };
+};
+
+/**
+ * Generate the actual database operation for the changes
+ * @param {String} changeType - Type of change (add, modify, delete)
+ * @param {String} entityType - Type of entity being changed
+ * @param {String} entityIdentifier - Identifier for the entity
+ * @param {Object} changes - The changes to apply
+ * @param {String} collectionPath - Path to the collection in the timetable
+ * @param {Object} currentState - Current state of the entity (if exists)
+ * @returns {Object} - Database operation details
+ */
+const generateDatabaseOperation = (changeType, entityType, entityIdentifier, changes, collectionPath, currentState) => {
+  // Create the appropriate MongoDB update operation
+  switch (changeType) {
+    case 'add':
+      return {
+        operation: 'updateOne',
+        query: { _id: 'PLACEHOLDER_FOR_PROJECT_ID' },
+        update: { $push: { [collectionPath]: changes } }
+      };
+    
+    case 'modify':
+      let query = { _id: 'PLACEHOLDER_FOR_PROJECT_ID' };
+      let updateFields = {};
+      
+      // Build the update fields based on entity type
+      switch (entityType) {
+        case 'class':
+          query[`${collectionPath}.room`] = entityIdentifier;
+          Object.entries(changes).forEach(([key, value]) => {
+            updateFields[`${collectionPath}.$.${key}`] = value;
+          });
+          break;
+          
+        case 'faculty':
+          if (entityIdentifier.includes('@')) {
+            query[`${collectionPath}.mail`] = entityIdentifier;
+          } else if (/^\d+$/.test(entityIdentifier)) {
+            query[`${collectionPath}.id`] = entityIdentifier;
+          } else {
+            query[`${collectionPath}.name`] = entityIdentifier;
+          }
+          Object.entries(changes).forEach(([key, value]) => {
+            updateFields[`${collectionPath}.$.${key}`] = value;
+          });
+          break;
+          
+        case 'subject':
+          if (/^[A-Z]+\d+$/.test(entityIdentifier)) {
+            query[`${collectionPath}.code`] = entityIdentifier;
+          } else {
+            query[`${collectionPath}.subject`] = entityIdentifier;
+          }
+          Object.entries(changes).forEach(([key, value]) => {
+            updateFields[`${collectionPath}.$.${key}`] = value;
+          });
+          break;
+          
+        case 'timeSlot':
+          const [day, times] = entityIdentifier.split(' ');
+          const [startTime, endTime] = times ? times.split('-') : [null, null];
+          
+          query[`${collectionPath}.day`] = day;
+          if (startTime) query[`${collectionPath}.startTime`] = startTime;
+          if (endTime) query[`${collectionPath}.endTime`] = endTime;
+          
+          Object.entries(changes).forEach(([key, value]) => {
+            updateFields[`${collectionPath}.$.${key}`] = value;
+          });
+          break;
+          
+        case 'grade':
+          const [grade, section] = entityIdentifier.split('-');
+          query[`${collectionPath}.grade`] = grade;
+          query[`${collectionPath}.section`] = section;
+          
+          Object.entries(changes).forEach(([key, value]) => {
+            updateFields[`${collectionPath}.$.${key}`] = value;
+          });
+          break;
+      }
+      
+      // If currentState has an _id, use it for a more precise update
+      if (currentState && currentState._id) {
+        query = { _id: 'PLACEHOLDER_FOR_PROJECT_ID' };
+        updateFields = {};
+        Object.entries(changes).forEach(([key, value]) => {
+          updateFields[`${collectionPath}.$[elem].${key}`] = value;
+        });
+        
+        return {
+          operation: 'updateOne',
+          query,
+          update: { $set: updateFields },
+          options: {
+            arrayFilters: [{ "elem._id": currentState._id }]
+          }
+        };
+      }
+      
+      return {
+        operation: 'updateOne',
+        query,
+        update: { $set: updateFields }
+      };
+      
+    case 'delete':
+      if (currentState && currentState._id) {
+        return {
+          operation: 'updateOne',
+          query: { _id: 'PLACEHOLDER_FOR_PROJECT_ID' },
+          update: { 
+            $pull: { 
+              [collectionPath]: { _id: currentState._id } 
+            } 
+          }
+        };
+      }
+      
+      return {
+        operation: 'updateOne',
+        query: { _id: 'PLACEHOLDER_FOR_PROJECT_ID' },
+        update: { 
+          $pull: { 
+            [collectionPath]: buildPullCriteria(entityType, entityIdentifier) 
+          } 
+        }
+      };
+      
+    default:
+      return null;
+  }
+};
+
+/**
+ * Build criteria for $pull operation in MongoDB
+ * @param {String} entityType - Type of entity
+ * @param {String} entityIdentifier - Identifier of entity
+ * @returns {Object} - Criteria for $pull
+ */
+const buildPullCriteria = (entityType, entityIdentifier) => {
+  switch (entityType) {
+    case 'class':
+      return { room: entityIdentifier };
+      
+    case 'faculty':
+      // Check if identifier is email, ID, or name
+      if (entityIdentifier.includes('@')) {
+        return { mail: entityIdentifier };
+      } else if (/^\d+$/.test(entityIdentifier)) {
+        return { id: entityIdentifier };
+      } else {
+        return { name: entityIdentifier };
+      }
+      
+    case 'subject':
+      // Check if identifier is code or name
+      if (/^[A-Z]+\d+$/.test(entityIdentifier)) {
+        return { code: entityIdentifier };
+      } else {
+        return { subject: entityIdentifier };
+      }
+      
+    case 'timeSlot':
+      const [day, times] = entityIdentifier.split(' ');
+      const [startTime, endTime] = times ? times.split('-') : [null, null];
+      
+      const criteria = { day };
+      if (startTime) criteria.startTime = startTime;
+      if (endTime) criteria.endTime = endTime;
+      return criteria;
+      
+    case 'grade':
+      const [grade, section] = entityIdentifier.split('-');
+      return { grade, section };
+      
+    default:
+      return {};
+  }
+};
+
+/**
+ * Detect potential conflicts with the proposed changes
+ * @param {String} entityType - Type of entity
+ * @param {Object} changes - Proposed changes
+ * @param {Object} timetable - Current timetable
+ * @returns {Array} - List of potential conflicts
+ */
+const detectPotentialConflicts = (entityType, changes, timetable) => {
+  const conflicts = [];
+  
+  switch (entityType) {
+    case 'class':
+      // Check for duplicate room numbers
+      if (changes.room && timetable.classes.some(c => c.room === changes.room)) {
+        conflicts.push(`Room ${changes.room} already exists`);
+      }
+      
+      // Check if room is already assigned in schedules
+      if (timetable.hasGeneratedResults && timetable.generationResults && timetable.generationResults.length > 0) {
+        const latestResult = timetable.generationResults[0];
+        let isRoomUsed = false;
+        
+        Object.values(latestResult.schedules).forEach(gradeSchedule => {
+          Object.values(gradeSchedule).forEach(daySchedule => {
+            daySchedule.forEach(slot => {
+              if (slot.room === changes.room) {
+                isRoomUsed = true;
+              }
+            });
+          });
+        });
+        
+        if (isRoomUsed) {
+          conflicts.push(`Room ${changes.room} is currently used in the generated schedule. Changes may require regeneration.`);
+        }
+      }
+      break;
+      
+    case 'faculty':
+      // Check for duplicate faculty IDs
+      if (changes.id && timetable.faculty.some(f => f.id === changes.id)) {
+        conflicts.push(`Faculty ID ${changes.id} already exists`);
+      }
+      
+      // Check if faculty is assigned to subjects
+      const facultyAssignedSubjects = timetable.subjects.filter(s => 
+        s.facultyIds && s.facultyIds.includes(changes.id)
+      );
+      
+      if (facultyAssignedSubjects.length > 0) {
+        conflicts.push(`Faculty is assigned to ${facultyAssignedSubjects.length} subjects: ${facultyAssignedSubjects.map(s => s.subject).join(', ')}`);
+      }
+      
+      // Check if faculty is in current schedules
+      if (timetable.hasGeneratedResults && timetable.generationResults && timetable.generationResults.length > 0) {
+        const latestResult = timetable.generationResults[0];
+        let isFacultyScheduled = false;
+        
+        Object.values(latestResult.schedules).forEach(gradeSchedule => {
+          Object.values(gradeSchedule).forEach(daySchedule => {
+            daySchedule.forEach(slot => {
+              if (slot.faculty === changes.id) {
+                isFacultyScheduled = true;
+              }
+            });
+          });
+        });
+        
+        if (isFacultyScheduled) {
+          conflicts.push(`Faculty is currently scheduled in the timetable. Changes may require regeneration.`);
+        }
+      }
+      break;
+      
+    case 'subject':
+      // Check for duplicate subject codes
+      if (changes.code && timetable.subjects.some(s => s.code === changes.code)) {
+        conflicts.push(`Subject code ${changes.code} already exists`);
+      }
+      
+      // Check if changing classes per week will affect scheduling
+      if (changes.classesWeek && timetable.hasGeneratedResults) {
+        conflicts.push(`Changing the number of weekly classes will require regenerating the schedule`);
+      }
+      break;
+      
+    case 'timeSlot':
+      // Check for overlapping time slots
+      if (changes.day && changes.startTime && changes.endTime) {
+        timetable.timeSlots.forEach(slot => {
+          if (slot.day === changes.day) {
+            const existingStart = slot.startTime;
+            const existingEnd = slot.endTime;
+            const newStart = changes.startTime;
+            const newEnd = changes.endTime;
+            
+            // Check if the new time slot overlaps with existing ones
+            if ((newStart >= existingStart && newStart < existingEnd) ||
+                (newEnd > existingStart && newEnd <= existingEnd) ||
+                (newStart <= existingStart && newEnd >= existingEnd)) {
+              conflicts.push(`Time slot overlaps with existing slot: ${slot.day} ${slot.startTime}-${slot.endTime}`);
+            }
+          }
+        });
+      }
+      
+      // Check if time slot is used in current schedules
+      if (timetable.hasGeneratedResults) {
+        conflicts.push(`Changing time slots will require regenerating the schedule`);
+      }
+      break;
+      
+    case 'grade':
+      // Check for duplicate grade-section
+      if (changes.grade && changes.section) {
+        const gradeSection = `${changes.grade}-${changes.section}`;
+        const existingGrade = timetable.grades.find(g => 
+          g.grade === changes.grade && g.section === changes.section
+        );
+        
+        if (existingGrade) {
+          conflicts.push(`Grade ${gradeSection} already exists`);
+        }
+      }
+      
+      // Check if changing strength will affect room assignments
+      if (changes.strength) {
+        // Find rooms that would no longer be suitable
+        const suitableRooms = timetable.classes.filter(c => 
+          parseInt(c.capacity) >= parseInt(changes.strength)
+        );
+        
+        if (suitableRooms.length === 0) {
+          conflicts.push(`No rooms have capacity for ${changes.strength} students`);
+        }
+      }
+      
+      // Check if grade is used in subject assignments
+      const subjectsForGrade = timetable.subjects.filter(s => 
+        s.gradeSections && s.gradeSections.some(gs => 
+          gs.grade === changes.grade && gs.section === changes.section
+        )
+      );
+      
+      if (subjectsForGrade.length > 0) {
+        conflicts.push(`Grade is assigned to ${subjectsForGrade.length} subjects: ${subjectsForGrade.map(s => s.subject).join(', ')}`);
+      }
+      break;
+  }
+  
+  return conflicts;
+};
+
+/**
+ * Process messages from the chatbot interface
+ * @param {Object} req - Request object containing projectId and message
+ * @param {Object} res - Response object
+ */
+export const processChatbotMessage = async (req, res) => {
+  try {
+    const { projectId, message } = req.body;
+
+    if (!projectId || !message) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required parameters: projectId and message are required."
+      });
+    }
+
+    // 1. Check if this is a confirmation message for previous changes
+    if (message.toLowerCase().includes('confirm') || message.toLowerCase().includes('approve') || 
+        message.toLowerCase().includes('yes') || message.toLowerCase().includes('accept')) {
+      
+      // Look for the changeId in the message or from session/previous request
+      const changeIdMatch = message.match(/change(?:\s+id)?[:\s]+([a-f0-9-]+)/i);
+      const changeId = changeIdMatch ? changeIdMatch[1] : req.body.changeId;
+      
+      if (!changeId) {
+        return res.status(400).json({
+          success: false,
+          message: "Could not identify which changes to apply. Please provide a change ID or retry your request."
+        });
+      }
+      
+      // Retrieve the proposed changes from session or previous state
+      // In a real implementation, you might store these in a database or cache
+      const proposedChanges = req.body.proposedChanges;
+      
+      if (!proposedChanges) {
+        return res.status(400).json({
+          success: false,
+          message: "Could not find the proposed changes to apply. Please make your request again."
+        });
+      }
+      
+      // Apply the changes
+      const result = await applyChangesInternal(projectId, changeId, proposedChanges);
+      
+      return res.status(result.success ? 200 : 400).json({
+        ...result,
+        message: result.success ? 
+          "Changes have been applied successfully." : 
+          "Failed to apply changes: " + result.message
+      });
+    }
+    
+    // 2. Check if this is a rejection/cancel message
+    if (message.toLowerCase().includes('reject') || message.toLowerCase().includes('cancel') || 
+        message.toLowerCase().includes('no') || message.toLowerCase().includes('don\'t apply')) {
+      
+      return res.status(200).json({
+        success: true,
+        message: "Changes have been cancelled. No modifications were made to the timetable."
+      });
+    }
+    
+    // 3. Otherwise, process as a new request
+    const result = await processRequestInternal(projectId, message);
+    
+    return res.status(result.success ? 200 : 400).json(result);
+  } catch (error) {
+    console.error("Error processing chatbot message:", error);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while processing your message. Please try again.",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Internal function to process requests (to be used by processChatbotMessage)
+ * @param {String} projectId - The ID of the timetable project
+ * @param {String} userMessage - Natural language request from user
+ * @returns {Object} - Proposed changes and response
+ */
+const processRequestInternal = async (projectId, userMessage) => {
+  try {
+    // 1. Fetch the current timetable data
+    const timetable = await Timetable.findById(projectId);
+    if (!timetable) {
+      return { success: false, message: "Timetable project not found" };
+    }
+
+    // 2. Process the natural language request using pattern matching
+    const requestAnalysis = analyzeRequest(userMessage, timetable);
+    
+    if (!requestAnalysis.success) {
+      return { 
+        success: false, 
+        message: requestAnalysis.message 
+      };
+    }
+
+    // 3. Generate proposed changes based on the request analysis
+    const proposedChanges = generateProposedChanges(requestAnalysis, timetable);
+    
+    // 4. Return the proposed changes for frontend approval
+    return {
+      success: true,
+      message: requestAnalysis.response,
+      proposedChanges: proposedChanges,
+      changeId: uuidv4() // Unique ID to track this change request
+    };
+  } catch (error) {
+    console.error("Error processing timetable request:", error);
+    return { 
+      success: false, 
+      message: "Failed to process your request. Please try again.",
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Internal function to apply changes (to be used by processChatbotMessage)
+ * @param {String} projectId - The ID of the timetable project
+ * @param {String} changeId - The unique ID of the change request
+ * @param {Object} approvedChanges - The changes approved by the user
+ * @returns {Object} - Result of applying changes
+ */
+const applyChangesInternal = async (projectId, changeId, approvedChanges) => {
+  try {
+    // 1. Fetch the current timetable data
+    const timetable = await Timetable.findById(projectId);
+    if (!timetable) {
+      return { success: false, message: "Timetable project not found" };
+    }
+    
+    // 2. Apply the database operation based on the change
+    const { changeType, entityType, collectionPath, currentState, newState } = approvedChanges;
+    
+    let updateOperation = {};
+    let updateResult = null;
+    
+    switch (changeType) {
+      case 'add':
+        // Add a new item to the collection
+        updateOperation = { 
+          $push: { [collectionPath]: newState } 
+        };
+        break;
+        
+      case 'modify':
+        // Find and update the existing item
+        if (!currentState || (!currentState._id && !approvedChanges.entityIdentifier)) {
+          return { 
+            success: false, 
+            message: `Cannot find ${entityType} to update` 
+          };
+        }
+        
+        // For each field in newState, create an update operation
+        updateOperation = { $set: {} };
+        
+        if (currentState && currentState._id) {
+          // If we have the _id, use it for precise update
+          Object.entries(newState).forEach(([key, value]) => {
+            if (key !== '_id') {
+              updateOperation.$set[`${collectionPath}.$[elem].${key}`] = value;
+            }
+          });
+          
+          updateResult = await Timetable.updateOne(
+            { _id: projectId },
+            updateOperation,
+            { 
+              arrayFilters: [{ "elem._id": currentState._id }],
+              new: true 
+            }
+          );
+        } else {
+          // Otherwise use the identifier for the update
+          const query = { _id: projectId };
+          const filter = buildPullCriteria(entityType, approvedChanges.entityIdentifier);
+          
+          Object.keys(filter).forEach(key => {
+            query[`${collectionPath}.${key}`] = filter[key];
+          });
+          
+          Object.entries(newState).forEach(([key, value]) => {
+            updateOperation.$set[`${collectionPath}.$.${key}`] = value;
+          });
+          
+          updateResult = await Timetable.updateOne(
+            query,
+            updateOperation
+          );
+        }
+        break;
+        
+      case 'delete':
+        // Remove the item from the collection
+        if (currentState && currentState._id) {
+          updateOperation = { 
+            $pull: { [collectionPath]: { _id: currentState._id } } 
+          };
+        } else if (approvedChanges.entityIdentifier) {
+          updateOperation = { 
+            $pull: { 
+              [collectionPath]: buildPullCriteria(entityType, approvedChanges.entityIdentifier) 
+            } 
+          };
+        } else {
+          return { 
+            success: false, 
+            message: `Cannot find ${entityType} to delete` 
+          };
+        }
+        break;
+        
+      default:
+        return { 
+          success: false, 
+          message: "Invalid change type" 
+        };
+    }
+    
+    // If we haven't executed an update yet (for 'add' and 'delete' operations)
+    if (!updateResult) {
+      updateResult = await Timetable.updateOne(
+        { _id: projectId },
+        updateOperation
+      );
+    }
+    
+    if (updateResult.modifiedCount === 0 && updateResult.matchedCount > 0) {
+      return {
+        success: true,
+        message: "No changes were needed (item already matches requested state)",
+        details: updateResult
+      };
+    } else if (updateResult.matchedCount === 0) {
+      return {
+        success: false,
+        message: "Could not find the timetable or specific item to update",
+        details: updateResult
+      };
+    }
+    
+    // 3. Retrieve the updated timetable data
+    const updatedTimetable = await Timetable.findById(projectId);
+    
+    // 4. Return success response with before/after details
+    return {
+      success: true,
+      message: `Successfully ${changeType === 'add' ? 'added' : changeType === 'modify' ? 'updated' : 'deleted'} the ${entityType}`,
+      details: {
+        before: timetable,
+        after: updatedTimetable,
+        changeType,
+        entityType,
+        changeId
+      }
+    };
+  } catch (error) {
+    console.error("Error applying timetable changes:", error);
+    return { 
+      success: false, 
+      message: "Failed to apply changes to the timetable.", 
+      error: error.message 
+    };
   }
 };

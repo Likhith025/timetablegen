@@ -14,7 +14,7 @@ const app = express();
 // Set up CORS with PATCH included
 app.use(
   cors({
-    origin: "http://localhost:5173", // Allow frontend URL
+    origin: "*", // Allow frontend URL
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // Include PATCH
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true, // Allow cookies/auth tokens
@@ -50,3 +50,5 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+//
