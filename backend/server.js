@@ -13,24 +13,11 @@ const app = express();
 
 // Set up CORS with multiple allowed origins
 const allowedOrigins = [
-  "https://timetablegen-2ytm.vercel.app",
-  "http://localhost:3000"
+  "https://timetablegen-2ytm.vercel.app", // Production frontend
+  "http://localhost:5173" // Local development frontend
 ];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, origin);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true
-  })
-);
+app.use(cors());
 
 app.use(express.json());
 
