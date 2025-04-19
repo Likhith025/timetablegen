@@ -11,13 +11,24 @@ dotenv.config();
 
 const app = express();
 
-// Set up CORS with PATCH included
+// Set up CORS with multiple allowed origins
+const allowedOrigins = [
+  "https://timetablegen-2ytm.vercel.app",
+  "http://localhost:3000"
+];
+
 app.use(
   cors({
-    origin: "*", // Allow frontend URL
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // Include PATCH
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, origin);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true, // Allow cookies/auth tokens
+    credentials: true
   })
 );
 
@@ -38,7 +49,6 @@ app.get("/", (req, res) => {
 app.use("/user", userRouter);
 app.use("/auth", Grouter);
 app.use("/all", AllRouter);
-// Note: Ensure AllRouter defines PATCH /timetables/:projectId with the updateTimetable function
 
 // Global Error Handling Middleware
 app.use((err, req, res, next) => {
@@ -50,5 +60,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-//
