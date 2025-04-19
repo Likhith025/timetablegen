@@ -241,12 +241,6 @@ export const login = async (req, res) => {
             { expiresIn: "7d" }
         );
 
-        // Set CORS Headers (Important for Preflight Requests)
-        res.setHeader("Access-Control-Allow-Origin", "http://localhost:5173"); // Match frontend URL
-        res.setHeader("Access-Control-Allow-Credentials", "true"); // Allow cookies/sessions
-        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
         // Send response
         res.status(200).json({
             message: "Login successful",
@@ -256,9 +250,8 @@ export const login = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-            }
+            },
         });
-
     } catch (error) {
         console.error("Login Error:", error.message);
         res.status(500).json({ message: "Server Error", error: error.message });
