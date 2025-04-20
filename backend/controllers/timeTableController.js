@@ -1089,59 +1089,396 @@ export const getTimetableById = async (req, res) => {
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Process a natural language request and return proposed changes
+ * Process natural language with Mistral API
+ * @param {String} message - User's message
+ * @returns {Object} - Structured analysis of the request
+ */
+const processWithNLP = async (message) => {
+  try {
+    console.log("Making request to Mistral API...");
+    
+    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer dKZeswS1fkyXYvrE7Eoi4jm6NWx7iDna",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        "model": "mistral-small-latest",
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_tokens": 1000,
+        "stream": false,
+        "messages": [
+          {
+            "role": "system",
+            "content": `You are a timetable assistant that analyzes user messages. You must ONLY respond with a valid JSON object.
+
+For timetable operation requests, extract:
+- messageType: "operation"
+- operation: "add", "modify", or "delete"
+- entityType: "class", "faculty", "subject", "timeSlot", or "grade"
+- attributes: all relevant information about the entity
+
+For information queries about timetables, extract:
+- messageType: "query"
+- queryType: "information", "count", "list", "availability", "schedule"
+- entityType: "class", "faculty", "subject", "timeSlot", "grade", or "room"
+- filters: include all relevant information such as:
+  * teacherName: full name of the teacher
+  * subject: subject name or code
+  * room: room number
+  * grade: grade number
+  * section: section letter
+  * day: day of the week
+  * time: specific time like "14:35"
+  * timeSlot: time slot like "08:30-09:30"
+
+For conversational messages (greetings, small talk), respond with:
+- messageType: "conversation"
+- message: appropriate friendly response`
+          },
+          {
+            "role": "user",
+            "content": message
+          }
+        ],
+        "response_format": {
+          "type": "json_object"
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("API response error:", errorText);
+      throw new Error(`API returned status ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+      throw new Error("Invalid response from API");
+    }
+
+    const content = result.choices[0].message.content;
+    return JSON.parse(content);
+    
+  } catch (error) {
+    console.error("Error in processWithNLP:", error.message);
+    return {
+      messageType: 'conversation',
+      message: "I'm sorry, I'm having trouble understanding. Could you rephrase that?"
+    };
+  }
+};
+
+/**
+ * Process a natural language request and return response
  * @param {Object} req - Request object containing projectId and userMessage
  * @param {Object} res - Response object
  */
 export const processRequest = async (req, res) => {
+  console.log("Processing request:", req.body);
+  
   try {
     const { projectId, userMessage } = req.body;
 
     if (!projectId || !userMessage) {
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters: projectId and userMessage are required."
+        message: "Missing required parameters"
       });
     }
 
-    // 1. Fetch the current timetable data
+    // Get timetable data
     const timetable = await Timetable.findById(projectId);
     if (!timetable) {
       return res.status(404).json({
         success: false,
-        message: "Timetable project not found"
+        message: "Timetable not found"
       });
     }
 
-    // 2. Process the natural language request using pattern matching
-    const requestAnalysis = analyzeRequest(userMessage, timetable);
+    // Process with Mistral API
+    const nlpAnalysis = await processWithNLP(userMessage);
     
-    if (!requestAnalysis.success) {
-      return res.status(400).json({ 
-        success: false, 
-        message: requestAnalysis.message 
+    // Handle conversational messages
+    if (nlpAnalysis.messageType === 'conversation') {
+      return res.status(200).json({
+        success: true,
+        message: nlpAnalysis.message || "How can I help with your timetable?",
+        isConversational: true
       });
     }
-
-    // 3. Generate proposed changes based on the request analysis
-    const proposedChanges = generateProposedChanges(requestAnalysis, timetable);
     
-    // 4. Return the proposed changes for frontend approval
+    // Handle information queries
+    if (nlpAnalysis.messageType === 'query') {
+      const response = await generateResponse(nlpAnalysis, timetable, userMessage);
+      return res.status(200).json({
+        success: true,
+        message: response,
+        isQuery: true
+      });
+    }
+    
+    // Handle operations
+    if (nlpAnalysis.messageType === 'operation') {
+      return res.status(200).json({
+        success: true,
+        message: `I'll ${nlpAnalysis.operation} that ${nlpAnalysis.entityType} for you. Please confirm the details.`,
+        operation: nlpAnalysis.operation,
+        entityType: nlpAnalysis.entityType,
+        attributes: nlpAnalysis.attributes || {}
+      });
+    }
+    
+    // Fallback
     return res.status(200).json({
-      success: true,
-      message: requestAnalysis.response,
-      proposedChanges: proposedChanges,
-      changeId: uuidv4() // Unique ID to track this change request
+      success: false,
+      message: "I'm not sure what you're asking. Could you rephrase that?"
     });
+    
   } catch (error) {
-    console.error("Error processing timetable request:", error);
+    console.error("Error:", error);
     return res.status(500).json({ 
       success: false, 
-      message: "Failed to process your request. Please try again.",
-      error: error.message
+      message: "Sorry, I couldn't process that request. Please try again."
     });
   }
 };
+
+/**
+ * Generate a response based on NLP analysis and timetable data
+ * @param {Object} nlpAnalysis - Analysis from AI
+ * @param {Object} timetable - Timetable data
+ * @param {String} userMessage - Original user message
+ * @returns {String} - Response message
+ */
+async function generateResponse(nlpAnalysis, timetable, userMessage) {
+  if (!timetable.hasGeneratedResults || !timetable.generationResults || timetable.generationResults.length === 0) {
+    return "No timetable has been generated yet.";
+  }
+  
+  const schedules = timetable.generationResults[0].schedules;
+  const filters = nlpAnalysis.filters || {};
+  
+  // Room availability query
+  if (nlpAnalysis.entityType === 'room' && filters.room) {
+    const roomNumber = filters.room;
+    const day = filters.day;
+    const time = filters.time; // For specific time queries
+    
+    // Check for specific time query (like "Is Room 105 occupied at 14:35?")
+    if (time && day) {
+      // Check if room is occupied at that time
+      let isOccupied = false;
+      let classDetails = null;
+      
+      // Search all schedules to find if the room is occupied at that time
+      for (const gradeSection in schedules) {
+        if (!schedules[gradeSection][day]) continue;
+        
+        for (const slot of schedules[gradeSection][day]) {
+          if (slot.room && slot.room.toString() === roomNumber.toString()) {
+            // Check if time falls in this slot
+            const [startTime, endTime] = slot.timeSlot.split('-');
+            if (isTimeInRange(time, startTime, endTime)) {
+              isOccupied = true;
+              const teacher = timetable.faculty.find(f => f.id === slot.faculty);
+              classDetails = {
+                subject: slot.subject,
+                gradeSection,
+                teacher: teacher ? teacher.name : 'Unknown Teacher'
+              };
+              break;
+            }
+          }
+        }
+        if (isOccupied) break;
+      }
+      
+      if (isOccupied && classDetails) {
+        return `Yes, Room ${roomNumber} is occupied at ${time} on ${day} with ${classDetails.subject} for ${classDetails.gradeSection} by ${classDetails.teacher}.`;
+      } else {
+        return `No, Room ${roomNumber} is free at ${time} on ${day}.`;
+      }
+    }
+    
+    // General room availability query
+    if (day) {
+      const occupied = [];
+      
+      // Find all times the room is occupied on that day
+      Object.keys(schedules).forEach(gradeSection => {
+        if (!schedules[gradeSection][day]) return;
+        
+        schedules[gradeSection][day].forEach(slot => {
+          if (slot.room && slot.room.toString() === roomNumber.toString()) {
+            occupied.push(`${slot.timeSlot}: ${slot.subject}`);
+          }
+        });
+      });
+      
+      if (occupied.length === 0) {
+        return `Room ${roomNumber} is free all day on ${day}.`;
+      } else {
+        return `Room ${roomNumber} is occupied at: ${occupied.join(', ')}`;
+      }
+    }
+    
+    return `Please specify which day you're asking about for Room ${roomNumber}.`;
+  }
+  
+  // Teacher query
+  if (filters.teacherName) {
+    const teacherName = filters.teacherName;
+    const day = filters.day;
+    
+    // Find teacher in database
+    const teacher = timetable.faculty.find(f => 
+      f.name.toLowerCase().includes(teacherName.toLowerCase()) ||
+      teacherName.toLowerCase().includes(f.name.toLowerCase())
+    );
+    
+    if (!teacher) {
+      return `Teacher ${teacherName} not found.`;
+    }
+    
+    // Find classes taught by this teacher
+    const classes = [];
+    const subjects = new Set();
+    
+    // Loop through schedules
+    Object.keys(schedules).forEach(gradeSection => {
+      const daysToCheck = day ? [day] : Object.keys(schedules[gradeSection]);
+      
+      daysToCheck.forEach(currentDay => {
+        if (!schedules[gradeSection][currentDay]) return;
+        
+        schedules[gradeSection][currentDay].forEach(slot => {
+          if (slot.faculty === teacher.id) {
+            classes.push({
+              day: currentDay,
+              time: slot.timeSlot,
+              subject: slot.subject,
+              gradeSection: gradeSection
+            });
+            subjects.add(slot.subject);
+          }
+        });
+      });
+    });
+    
+    // No classes found
+    if (classes.length === 0) {
+      return `${teacher.name} is not teaching any classes${day ? ' on ' + day : ''}.`;
+    }
+    
+    // "What does X teach" query
+    if (userMessage.toLowerCase().includes('what') && userMessage.toLowerCase().includes('teach')) {
+      return `${teacher.name} teaches ${Array.from(subjects).join(', ')}.`;
+    }
+    
+    // Schedule query
+    if (day || userMessage.toLowerCase().includes('schedule')) {
+      const schedule = classes
+        .filter(c => !day || c.day === day)
+        .map(c => `${c.day} ${c.time}: ${c.subject} (${c.gradeSection})`)
+        .join(', ');
+        
+      return `${teacher.name}'s schedule: ${schedule}`;
+    }
+    
+    // General info
+    return `${teacher.name} teaches ${Array.from(subjects).join(', ')}.`;
+  }
+  
+  // Grade schedule query
+  if (nlpAnalysis.entityType === 'grade' && filters.grade && filters.section && filters.day) {
+    const gradeSection = `${filters.grade}-${filters.section}`;
+    
+    if (!schedules[gradeSection] || !schedules[gradeSection][filters.day]) {
+      return `No schedule found for Grade ${filters.grade}-${filters.section} on ${filters.day}.`;
+    }
+    
+    // First class query
+    if (userMessage.toLowerCase().includes('first class')) {
+      const daySchedule = [...schedules[gradeSection][filters.day]];
+      
+      // Sort by time
+      daySchedule.sort((a, b) => {
+        const timeA = a.timeSlot.split('-')[0];
+        const timeB = b.timeSlot.split('-')[0];
+        return timeA.localeCompare(timeB);
+      });
+      
+      if (daySchedule.length === 0) {
+        return `No classes scheduled for Grade ${filters.grade}-${filters.section} on ${filters.day}.`;
+      }
+      
+      const firstClass = daySchedule[0];
+      const teacher = timetable.faculty.find(f => f.id === firstClass.faculty);
+      
+      return `First class for Grade ${filters.grade}-${filters.section} on ${filters.day} is ${firstClass.subject} at ${firstClass.timeSlot} with ${teacher ? teacher.name : 'Unknown Teacher'}.`;
+    }
+    
+    // Full schedule
+    const classes = schedules[gradeSection][filters.day].map(slot => {
+      const teacher = timetable.faculty.find(f => f.id === slot.faculty);
+      return `${slot.timeSlot}: ${slot.subject}${teacher ? ' (' + teacher.name + ')' : ''}`;
+    }).join(', ');
+    
+    return `Grade ${filters.grade}-${filters.section} schedule for ${filters.day}: ${classes}`;
+  }
+  
+  // List teachers
+  if (nlpAnalysis.queryType === 'list' && nlpAnalysis.entityType === 'faculty') {
+    if (!timetable.faculty || timetable.faculty.length === 0) {
+      return "No teachers found in the system.";
+    }
+    
+    return `Teachers: ${timetable.faculty.map(t => t.name).join(', ')}`;
+  }
+  
+  // List subjects
+  if (nlpAnalysis.queryType === 'list' && nlpAnalysis.entityType === 'subject') {
+    if (!timetable.subjects || timetable.subjects.length === 0) {
+      return "No subjects found in the system.";
+    }
+    
+    return `Subjects: ${timetable.subjects.map(s => s.subject || s.name).join(', ')}`;
+  }
+  
+  return "I couldn't find that information. Try asking about teachers, rooms, or classes.";
+}
+
+/**
+ * Check if a time is within a range
+ * @param {String} time - Time to check (e.g., "14:35")
+ * @param {String} start - Start time (e.g., "14:30")
+ * @param {String} end - End time (e.g., "15:30")
+ * @returns {Boolean} - True if time is in range
+ */
+function isTimeInRange(time, start, end) {
+  // Convert all to minutes for comparison
+  const timeMinutes = timeToMinutes(time);
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+  
+  return timeMinutes >= startMinutes && timeMinutes < endMinutes;
+}
+
+/**
+ * Convert time to minutes since midnight
+ * @param {String} time - Time in format "HH:MM"
+ * @returns {Number} - Minutes
+ */
+function timeToMinutes(time) {
+  time = time.replace('.', ':');
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
 
 /**
  * Apply approved changes to the timetable
@@ -1307,69 +1644,6 @@ const shouldRegenerateSchedule = (entityType, changeType) => {
   return false;
 };
 
-/**
- * Analyze the user's natural language request using pattern matching
- * @param {String} message - User's message
- * @param {Object} timetable - Current timetable data
- * @returns {Object} - Analysis of the request
- */
-const analyzeRequest = (message, timetable) => {
-  const lowercaseMsg = message.toLowerCase();
-  
-  // Detect operation type (add, update, delete)
-  let changeType = '';
-  if (lowercaseMsg.includes('add') || lowercaseMsg.includes('create') || lowercaseMsg.includes('new')) {
-    changeType = 'add';
-  } else if (lowercaseMsg.includes('change') || lowercaseMsg.includes('update') || lowercaseMsg.includes('modify')) {
-    changeType = 'modify';
-  } else if (lowercaseMsg.includes('delete') || lowercaseMsg.includes('remove')) {
-    changeType = 'delete';
-  } else {
-    return { 
-      success: false, 
-      message: "I couldn't determine if you want to add, modify, or delete something. Please be more specific." 
-    };
-  }
-  
-  // Detect entity type (class, faculty, subject, timeSlot, grade)
-  let entityType = '';
-  if (lowercaseMsg.includes('class') || lowercaseMsg.includes('room')) {
-    entityType = 'class';
-  } else if (lowercaseMsg.includes('teacher') || lowercaseMsg.includes('faculty')) {
-    entityType = 'faculty';
-  } else if (lowercaseMsg.includes('subject') || lowercaseMsg.includes('course')) {
-    entityType = 'subject';
-  } else if (lowercaseMsg.includes('time') || lowercaseMsg.includes('slot') || lowercaseMsg.includes('schedule')) {
-    entityType = 'timeSlot';
-  } else if (lowercaseMsg.includes('grade') || lowercaseMsg.includes('section')) {
-    entityType = 'grade';
-  } else {
-    return { 
-      success: false, 
-      message: "I couldn't determine what you want to modify (class, faculty, subject, time slot, or grade). Please be more specific." 
-    };
-  }
-  
-  // Extract entity identifier and changes
-  const entityInfo = extractEntityInfo(message, entityType, changeType, timetable);
-  if (!entityInfo.success) {
-    return entityInfo;
-  }
-  
-  // Generate human-readable response
-  const response = `I understand you want to ${changeType} a ${entityType}: ${entityInfo.description}. Please review the changes before confirming.`;
-  
-  return {
-    success: true,
-    changeType,
-    entityType,
-    entityIdentifier: entityInfo.identifier,
-    changes: entityInfo.changes,
-    potentialConflicts: detectPotentialConflicts(entityType, entityInfo.changes, timetable),
-    response,
-    description: entityInfo.description
-  };
-};
 
 /**
  * Extract entity information from the message

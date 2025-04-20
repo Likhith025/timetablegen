@@ -9,9 +9,30 @@ import {
   updateTimetable,
   processRequest, applyChanges, processChatbotMessage
 } from "../controllers/timeTableController.js";
+import { processTimetableQuery } from "../controllers/chatBotController.js";
 
 
 const AllRouter = express.Router();
+
+AllRouter.post("/timetable/query", async (req, res) => {
+  try {
+    const { message, projectId } = req.body;
+
+    // Validate request body
+    if (!message || !projectId) {
+      return res.status(400).json({ error: "Message and projectId are required" });
+    }
+
+    // Call the controller
+    const response = await processTimetableQuery({ message, projectId });
+
+    // Send the response
+    res.status(200).json({ response });
+  } catch (error) {
+    console.error("Route error:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 
 AllRouter.post('/:timetableId/save-generation', saveGenerationResults);

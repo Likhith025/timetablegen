@@ -114,7 +114,7 @@ const ChatbotInterface = ({ projectId: propProjectId }) => {
         setPendingChanges(null);
       }
       else {
-        const response = await fetch(`${API_BASE_URL}/all/processRequest`, {
+        const response = await fetch(`${API_BASE_URL}/all/timetable/query`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -122,7 +122,7 @@ const ChatbotInterface = ({ projectId: propProjectId }) => {
           },
           body: JSON.stringify({
             projectId,
-            userMessage
+            message: userMessage
           })
         });
 
@@ -137,7 +137,12 @@ const ChatbotInterface = ({ projectId: propProjectId }) => {
 
         const data = await response.json();
 
-        if (data.success) {
+        if (data.response) {
+          setMessages(prev => [...prev, {
+            text: data.response,
+            sender: "bot"
+          }]);
+        } else if (data.success) {
           setMessages(prev => [...prev, {
             text: data.message,
             sender: "bot"
@@ -152,7 +157,7 @@ const ChatbotInterface = ({ projectId: propProjectId }) => {
           }
         } else {
           setMessages(prev => [...prev, {
-            text: `I couldn't process that request: ${data.message}`,
+            text: `I couldn't process that request: ${data.message || 'Unknown error'}`,
             sender: "bot"
           }]);
         }
@@ -256,12 +261,16 @@ const ChatbotInterface = ({ projectId: propProjectId }) => {
           {messages.map((msg, index) => (
             <div key={index} className={`message ${msg.sender}`}>
               <div className="message-bubble">
-                {msg.text.split('\n').map((line, i) => (
-                  <React.Fragment key={i}>
-                    {line}
-                    {i < msg.text.split('\n').length - 1 && <br />}
-                  </React.Fragment>
-                ))}
+                {typeof msg.text === 'string' ? (
+                  msg.text.split('\n').map((line, i) => (
+                    <React.Fragment key={i}>
+                      {line}
+                      {i < msg.text.split('\n').length - 1 && <br />}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <pre>{JSON.stringify(msg.text, null, 2)}</pre>
+                )}
               </div>
             </div>
           ))}
