@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Timetable from "../model/Timetable_model.js"; // Adjust path as needed
 import User from "../model/user_model.js"; // Adjust path as needed
 
+
 export const generateTimetableDirectly = async (req, res) => {
   try {
     const {
@@ -13,15 +14,39 @@ export const generateTimetableDirectly = async (req, res) => {
       grades,
       subjects,
       timeSlots,
-      userId
+      userId,
+      type
     } = req.body;
     
     // Validate that all required data is present
-    if (!classes || !faculty || !grades || !subjects || !timeSlots) {
+    if (!classes || !faculty || !grades || !subjects || !timeSlots || !type) {
       return res.status(400).json({
         success: false,
-        message: "Missing required timetable data. Please provide classes, faculty, grades, subjects, and timeSlots."
+        message: "Missing required timetable data. Please provide classes, faculty, grades, subjects, timeSlots, and type."
       });
+    }
+
+    // Validate type
+    if (!['organization', 'personal'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid type. Must be 'organization' or 'personal'."
+      });
+    }
+
+    // Process faculty data based on type
+    let processedFaculty = faculty;
+    if (type === 'personal') {
+      // Remove email fields for personal mode
+      processedFaculty = faculty.map(({ id, name }) => ({ id, name, mail: '' }));
+    } else {
+      // Validate email presence for organization mode
+      if (!faculty.every(f => f.mail && f.mail.trim() !== '')) {
+        return res.status(400).json({
+          success: false,
+          message: "Email IDs are required for all faculty in organization mode."
+        });
+      }
     }
 
     // Get user ID
@@ -34,11 +59,12 @@ export const generateTimetableDirectly = async (req, res) => {
       multipleBuildings: multipleBuildings || false,
       buildings: buildings || [],
       classes,
-      faculty,
+      faculty: processedFaculty,
       grades,
       subjects,
       timeSlots,
-      createdBy: creatorId
+      createdBy: creatorId,
+      type
     };
 
     // Generate timetable schedule
@@ -134,6 +160,7 @@ export const updateTimetable = async (req, res) => {
       subjects,
       timeSlots,
       userId,
+      type
     } = req.body;
 
     // Validate projectId
@@ -141,6 +168,14 @@ export const updateTimetable = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid timetable ID. Please provide a valid projectId.",
+      });
+    }
+
+    // Validate type if provided
+    if (type && !['organization', 'personal'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid type. Must be 'organization' or 'personal'."
       });
     }
 
@@ -171,6 +206,31 @@ export const updateTimetable = async (req, res) => {
       });
     }
 
+    // Process faculty data based on type
+    let processedFaculty = faculty;
+    if (type && faculty !== undefined) {
+      if (type === 'personal') {
+        // Remove email fields for personal mode
+        processedFaculty = faculty.map(({ id, name }) => ({ id, name, mail: '' }));
+      } else if (type === 'organization') {
+        // If switching from personal to organization, keep existing emails or empty strings
+        processedFaculty = faculty.map(fac => ({
+          id: fac.id,
+          name: fac.name,
+          mail: fac.mail || '' // Keep provided emails or set empty
+        }));
+        // Validate email presence if provided
+        if (faculty.some(f => f.mail && f.mail.trim() !== '')) {
+          if (!faculty.every(f => f.mail && f.mail.trim() !== '')) {
+            return res.status(400).json({
+              success: false,
+              message: "Email IDs are required for all faculty in organization mode if any are provided."
+            });
+          }
+        }
+      }
+    }
+
     // Clean $ from gradeSections in subjects
     let cleanedSubjects = subjects;
     if (subjects !== undefined) {
@@ -189,10 +249,11 @@ export const updateTimetable = async (req, res) => {
       multipleBuildings: multipleBuildings !== undefined ? multipleBuildings : existingTimetable.multipleBuildings,
       buildings: buildings !== undefined ? buildings : existingTimetable.buildings,
       classes: classes !== undefined ? classes : existingTimetable.classes,
-      faculty: faculty !== undefined ? faculty : existingTimetable.faculty,
+      faculty: processedFaculty !== undefined ? processedFaculty : existingTimetable.faculty,
       grades: grades !== undefined ? grades : existingTimetable.grades,
       subjects: cleanedSubjects !== undefined ? cleanedSubjects : existingTimetable.subjects,
       timeSlots: timeSlots !== undefined ? timeSlots : existingTimetable.timeSlots,
+      type: type !== undefined ? type : existingTimetable.type,
       createdBy: creatorId,
       updatedAt: new Date(),
     };
@@ -302,11 +363,35 @@ export const updateTimetable = async (req, res) => {
     });
   }
 };
-
 function generateTimetableSchedule(timetableData) {
   const schedules = {};
   const conflicts = [];
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  
+  // Extract unique days from timeSlots
+  const days = [...new Set(timetableData.timeSlots.map(slot => slot.day))].sort();
+  if (days.length === 0) {
+    conflicts.push("No valid days provided in timeSlots.");
+    return {
+      generatedOn: new Date(),
+      generationStatus: "failed",
+      conflicts,
+      schedules: {},
+      algorithm: "consistent-grade-section",
+      version: "1.0"
+    };
+  }
+  
+  // Log extracted days for debugging
+  console.log("Extracted Days:", days);
+
+  // Validate that timeSlots exist for each day
+  days.forEach(day => {
+    const daySlots = timetableData.timeSlots.filter(slot => slot.day === day);
+    if (daySlots.length === 0) {
+      conflicts.push(`No time slots found for ${day}. Cannot schedule classes.`);
+    }
+    console.log(`Time slots for ${day}:`, daySlots);
+  });
   
   // Track subject assignments per grade-section to respect classesWeek
   const subjectAssignmentCount = {};
@@ -330,13 +415,9 @@ function generateTimetableSchedule(timetableData) {
   const roomGradeSectionAssignments = {};
 
   // Get unique time slots
-  const uniqueTimeSlots = [];
-  timetableData.timeSlots.forEach(slot => {
-    const timeSlot = `${slot.startTime}-${slot.endTime}`;
-    if (!uniqueTimeSlots.includes(timeSlot)) {
-      uniqueTimeSlots.push(timeSlot);
-    }
-  });
+  const uniqueTimeSlots = [...new Set(
+    timetableData.timeSlots.map(slot => `${slot.startTime}-${slot.endTime}`)
+  )];
   
   // Sort time slots chronologically
   uniqueTimeSlots.sort((a, b) => {
@@ -578,9 +659,25 @@ function generateTimetableSchedule(timetableData) {
 
   // STEP 2: Schedule subjects based on the consistent faculty-grade-section assignments
   days.forEach(day => {
-    const daySlots = timetableData.timeSlots
+    // Get time slots for the day, or use all unique time slots as fallback
+    let daySlots = timetableData.timeSlots
       .filter(slot => slot.day === day)
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    
+    // Fallback: If no slots for the day, use unique time slots with default applicableTo
+    if (daySlots.length === 0) {
+      console.warn(`No time slots found for ${day}. Using fallback time slots.`);
+      daySlots = uniqueTimeSlots.map(timeSlot => {
+        const [startTime, endTime] = timeSlot.split('-');
+        return {
+          day,
+          startTime,
+          endTime,
+          applicableTo: timetableData.grades.map(g => `${g.grade}-${g.section}`)
+        };
+      });
+      conflicts.push(`No specific time slots defined for ${day}. Using default time slots for scheduling.`);
+    }
     
     daySlots.forEach(slot => {
       const timeSlot = `${slot.startTime}-${slot.endTime}`;
@@ -828,6 +925,9 @@ function generateTimetableSchedule(timetableData) {
       schedules[gradeSection][day] = filteredSchedule;
     });
   });
+
+  // Log final schedules for debugging
+  console.log("Generated Schedules:", schedules);
 
   return {
     generatedOn: new Date(),

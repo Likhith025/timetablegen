@@ -322,7 +322,6 @@ const TimetableViewer = () => {
 
   return (
     <div className="timetable-viewer">
-      <ChatbotInterface/>
       <div className="viewer-header">
         <h2>Timetable Viewer</h2>
         <div className="view-mode-selector">

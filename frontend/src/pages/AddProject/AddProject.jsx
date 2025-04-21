@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import './AddProject.css';
 import TopBar from '../../components/TopBar/TopBar';
 import { useNavigate } from 'react-router-dom';
-import { jwtDecode } from "jwt-decode"; // Import jwtDecode
+import { jwtDecode } from "jwt-decode";
 import API_BASE_URL from '../../src';
-
 
 // Sample data for random generation
 const sampleData = {
@@ -58,10 +57,10 @@ const sampleData = {
     }
   ],
   timeSlots: [
-    { day: "Monday", startTime: "08:30", endTime: "09:30", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] },
-    { day: "Monday", startTime: "09:30", endTime: "10:30", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] },
-    { day: "Monday", startTime: "10:45", endTime: "11:45", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] },
-    { day: "Tuesday", startTime: "08:30", endTime: "09:30", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] }
+    { days: ["Monday"], startTime: "08:30", endTime: "09:30", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] },
+    { days: ["Monday"], startTime: "09:30", endTime: "10:30", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] },
+    { days: ["Monday"], startTime: "10:45", endTime: "11:45", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] },
+    { days: ["Tuesday"], startTime: "08:30", endTime: "09:30", applicableTo: ["9 - A", "9 - B", "10 - A", "10 - B"] }
   ]
 };
 
@@ -74,6 +73,7 @@ const MultiStepForm = () => {
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
+  const [facultyMode, setFacultyMode] = useState('organization'); // 'organization' or 'personal'
   const [formData, setFormData] = useState({
     projectName: '',
     classes: [{ room: '', capacity: '', building: '' }],
@@ -97,20 +97,19 @@ const MultiStepForm = () => {
     }],
     buildings: [],
     multipleBuildings: false,
-    timeSlots: [{ day: '', startTime: '', endTime: '', applicableTo: [] }],
+    timeSlots: [{ days: [], startTime: '', endTime: '', applicableTo: [] }],
   });
   const [newBuildingInput, setNewBuildingInput] = useState('');
   const fileInputRef = useRef(null);
+  const jsonFileInputRef = useRef(null);
 
   // Get user info from localStorage or token
   useEffect(() => {
-    // Get the token from localStorage
     const token = localStorage.getItem("token");
     console.log("Token found:", token ? "Yes" : "No");
     
     if (token) {
       try {
-        // Decode the JWT token
         const decoded = jwtDecode(token);
         console.log("Decoded token:", decoded);
         
@@ -124,7 +123,6 @@ const MultiStepForm = () => {
       }
     }
     
-    // Try to get user info from localStorage as fallback
     try {
       const userStr = localStorage.getItem("user");
       if (userStr) {
@@ -143,87 +141,140 @@ const MultiStepForm = () => {
     }
   }, []);
 
-const generateTimetable = async () => {
-  try {
-    setIsGenerating(true);
-    
-    // Ensure we have a userId
-    if (!userId) {
-      console.warn("No user ID available. Using a token-based authorization instead.");
-    }
-    
-    // Include userId in the request body
-    const requestData = {
-      ...formData,
-      userId: userId // Adding the user ID to the request
-    };
-    
-    console.log("Sending timetable generation request with user ID:", userId);
-    
-    // Include the auth token in header
-    const token = localStorage.getItem("token");
-    
-    const response = await fetch(`${API_BASE_URL}/all/generate-direct`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : ''
-      },
-      body: JSON.stringify(requestData)
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Failed to generate timetable');
-    }
-    
-    const data = await response.json();
-    console.log("Timetable generation response:", data);
-    
-    if (data.success) {
-      // Check for timetableId in the response structure
-      if (data.data && data.data.timetableId) {
-        navigate(`/timetable/${data.data.timetableId}`);
-      } else {
-        console.error("Missing timetableId in response:", data);
-        alert("Timetable was generated but ID is missing. Please check your timetables list.");
-      }
-    } else {
-      throw new Error(data.message || 'Invalid response data');
-    }
-  } catch (error) {
-    console.error('Error generating timetable:', error);
-    alert(`Failed to generate timetable: ${error.message || 'Unknown error'}`);
-  } finally {
-    setIsGenerating(false);
-  }
-};  
-  const loadJSONData = (json) => {
+  const generateTimetable = async () => {
     try {
-      const parsedData = JSON.parse(json);
+      setIsGenerating(true);
       
-      // Validate the data has the required structure
-      if (
-        parsedData.projectName &&
-        Array.isArray(parsedData.classes) &&
-        Array.isArray(parsedData.faculty) &&
-        Array.isArray(parsedData.grades) &&
-        Array.isArray(parsedData.subjects) &&
-        Array.isArray(parsedData.timeSlots)
-      ) {
-        setFormData({
-          ...parsedData,
-          buildings: parsedData.buildings || [],
-          multipleBuildings: parsedData.multipleBuildings || false
-        });
-        alert('Data loaded successfully!');
+      console.log("=== Timetable Generation Started ===");
+      console.log("Raw Form Data:", JSON.parse(JSON.stringify(formData)));
+
+      if (!userId) {
+        console.warn("No user ID available. Using a token-based authorization instead.");
+      }
+      
+      // Transform timeSlots to have single day entries for backend
+      const transformedTimeSlots = formData.timeSlots.flatMap(slot => 
+        slot.days.map(day => ({
+          day, // Single day for backend
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          applicableTo: slot.applicableTo
+        }))
+      );
+
+      console.log("Transformed Time Slots:", transformedTimeSlots);
+
+      const requestData = {
+        ...formData,
+        timeSlots: transformedTimeSlots,
+        userId: userId,
+        type: facultyMode // Add type based on facultyMode
+      };
+      
+      console.log("Request Payload Sent to Backend:", JSON.parse(JSON.stringify(requestData)));
+      console.log("Sending timetable generation request with user ID:", userId);
+      console.log("API Endpoint:", `${API_BASE_URL}/all/generate-direct`);
+
+      const token = localStorage.getItem("token");
+      console.log("Authorization Token:", token ? `Bearer ${token}` : "No token provided");
+      
+      const response = await fetch(`${API_BASE_URL}/all/generate-direct`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(requestData)
+      });
+      
+      console.log("API Response Status:", response.status, response.statusText);
+
+      const responseData = await response.json();
+      console.log("API Response Data:", responseData);
+
+      if (!response.ok) {
+        const errorData = responseData || {};
+        throw new Error(errorData.message || 'Failed to generate timetable');
+      }
+      
+      if (responseData.success) {
+        if (responseData.data && responseData.data.timetableId) {
+          console.log("Timetable Generated Successfully. Timetable ID:", responseData.data.timetableId);
+          navigate(`/timetable/${responseData.data.timetableId}`);
+        } else {
+          console.error("Missing timetableId in response:", responseData);
+          alert("Timetable was generated but ID is missing. Please check your timetables list.");
+        }
       } else {
-        alert('Invalid JSON format. Please check the structure of your data.');
+        throw new Error(responseData.message || 'Invalid response data');
       }
     } catch (error) {
-      console.error('Error parsing JSON:', error);
-      alert('Failed to parse JSON data. Please check the format.');
+      console.error("=== Timetable Generation Failed ===");
+      console.error('Error generating timetable:', error);
+      console.error('Error Details:', {
+        message: error.message,
+        stack: error.stack
+      });
+      alert(`Failed to generate timetable: ${error.message || 'Unknown error'}`);
+    } finally {
+      console.log("=== Timetable Generation Completed ===");
+      setIsGenerating(false);
     }
+  };  
+
+  const handleJSONUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+
+    if (!file.name.endsWith('.json')) {
+      console.error('Please upload a JSON file');
+      alert('Please upload a JSON file');
+      return;
+    }
+
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const json = e.target.result;
+        const parsedData = JSON.parse(json);
+        
+        if (
+          parsedData.projectName &&
+          Array.isArray(parsedData.classes) &&
+          Array.isArray(parsedData.faculty) &&
+          Array.isArray(parsedData.grades) &&
+          Array.isArray(parsedData.subjects) &&
+          Array.isArray(parsedData.timeSlots)
+        ) {
+          setFormData({
+            ...parsedData,
+            buildings: parsedData.buildings || [],
+            multipleBuildings: parsedData.multipleBuildings || false
+          });
+          // Set facultyMode based on parsedData.type if available
+          if (parsedData.type) {
+            setFacultyMode(parsedData.type);
+          }
+          alert('JSON data loaded successfully!');
+        } else {
+          alert('Invalid JSON format. Please check the structure of your data.');
+        }
+      } catch (error) {
+        console.error('Error parsing JSON:', error);
+        alert('Failed to parse JSON data. Please check the format.');
+      }
+    };
+
+    reader.onerror = (error) => {
+      console.error('Error reading file:', error);
+      alert('Error reading JSON file');
+    };
+
+    reader.readAsText(file);
   };
 
   const goToNextStep = () => {
@@ -236,7 +287,9 @@ const generateTimetable = async () => {
   };
 
   const goToPreviousStep = () => {
-    if (currentStep > 1) {
+    if (currentStep === 1) {
+      navigate('/dashboard');
+    } else if (currentStep > 1) {
       if (showUpload) {
         setShowUpload(null);
       } else {
@@ -250,7 +303,9 @@ const generateTimetable = async () => {
       ...formData,
       projectName: sampleData.projectName,
       classes: [...sampleData.classes],
-      faculty: [...sampleData.faculty],
+      faculty: facultyMode === 'personal' 
+        ? sampleData.faculty.map(({id, name}) => ({id, name, mail: ''}))
+        : [...sampleData.faculty],
       subjects: [...sampleData.subjects],
       grades: [...sampleData.grades],
       timeSlots: [...sampleData.timeSlots],
@@ -269,132 +324,11 @@ const generateTimetable = async () => {
     }, 100);
   };
 
-  const validateCSVHeaders = (headers, expectedHeaders) => {
-    return expectedHeaders.every(header => headers.includes(header));
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) {
-      console.log('No file selected');
-      return;
+  const handleJSONUploadClick = () => {
+    if (jsonFileInputRef.current) {
+      jsonFileInputRef.current.value = '';
+      jsonFileInputRef.current.click();
     }
-
-    if (!file.name.endsWith('.csv')) {
-      console.error('Please upload a CSV file');
-      alert('Please upload a CSV file');
-      return;
-    }
-
-    const reader = new FileReader();
-    
-    reader.onload = (e) => {
-      try {
-        const text = e.target.result;
-        console.log('File content:', text);
-        
-        const rows = text.split('\n').map(row => row.split(',').map(item => item.trim()));
-        if (rows.length < 2) {
-          console.error('CSV file is empty or invalid');
-          alert('CSV file is empty or invalid');
-          return;
-        }
-        
-        const headers = rows[0];
-        const data = rows.slice(1).filter(row => row.length > 1);
-        console.log('Headers:', headers);
-        console.log('Data:', data);
-
-        const expectedHeaders = {
-          2: ['room', 'capacity', 'building'],
-          3: ['id', 'name', 'mail'],
-          4: ['grade', 'section', 'strength', 'classAssignmentType'],
-          5: ['code', 'subject', 'facultyIds', 'gradeSections', 'classesWeek', 'isCombined', 'assignedClasses'],
-          6: ['day', 'startTime', 'endTime', 'applicableTo']
-        };
-
-        if (!validateCSVHeaders(headers, expectedHeaders[showUpload])) {
-          console.error('Invalid CSV format. Expected headers:', expectedHeaders[showUpload]);
-          alert(`Invalid CSV format. Expected headers: ${expectedHeaders[showUpload].join(', ')}`);
-          return;
-        }
-
-        switch (showUpload) {
-          case 2: // Classes
-            const newClasses = data.map(row => ({
-              room: row[headers.indexOf('room')] || '',
-              capacity: row[headers.indexOf('capacity')] || '',
-              building: row[headers.indexOf('building')] || ''
-            }));
-            setFormData(prev => ({
-              ...prev,
-              classes: newClasses,
-              multipleBuildings: newClasses.some(cls => cls.building !== ''),
-              buildings: [...new Set(newClasses.map(cls => cls.building).filter(Boolean))]
-            }));
-            break;
-
-          case 3: // Faculty
-            const newFaculty = data.map(row => ({
-              id: row[headers.indexOf('id')] || '',
-              name: row[headers.indexOf('name')] || '',
-              mail: row[headers.indexOf('mail')] || ''
-            }));
-            setFormData(prev => ({ ...prev, faculty: newFaculty }));
-            break;
-
-          case 4: // Grades
-            const newGrades = data.map(row => ({
-              grade: row[headers.indexOf('grade')] || '',
-              section: row[headers.indexOf('section')] || '',
-              strength: row[headers.indexOf('strength')] || '',
-              classAssignmentType: row[headers.indexOf('classAssignmentType')]?.toLowerCase() === 'any' ? 'any' : 'same'
-            }));
-            setFormData(prev => ({ ...prev, grades: newGrades }));
-            break;
-
-          case 5: // Subjects
-            const newSubjects = data.map(row => ({
-              code: row[headers.indexOf('code')] || '',
-              subject: row[headers.indexOf('subject')] || '',
-              facultyIds: row[headers.indexOf('facultyIds')]?.split(';') || [],
-              gradeSections: row[headers.indexOf('gradeSections')]?.split(';').map(gs => {
-                const [grade, section] = gs.split('-');
-                return { grade, section };
-              }) || [],
-              classesWeek: row[headers.indexOf('classesWeek')] || '',
-              isCombined: row[headers.indexOf('isCombined')]?.toLowerCase() === 'true' || false,
-              assignedClasses: row[headers.indexOf('assignedClasses')]?.split(';') || []
-            }));
-            setFormData(prev => ({ ...prev, subjects: newSubjects }));
-            break;
-
-          case 6: // Time Slots
-            const newTimeSlots = data.map(row => ({
-              day: row[headers.indexOf('day')] || '',
-              startTime: row[headers.indexOf('startTime')] || '',
-              endTime: row[headers.indexOf('endTime')] || '',
-              applicableTo: row[headers.indexOf('applicableTo')]?.split(';') || []
-            }));
-            setFormData(prev => ({ ...prev, timeSlots: newTimeSlots }));
-            break;
-
-          default:
-            break;
-        }
-        console.log('Updated form data:', formData);
-      } catch (error) {
-        console.error('Error processing CSV:', error);
-        alert('Error processing CSV file');
-      }
-    };
-
-    reader.onerror = (error) => {
-      console.error('Error reading file:', error);
-      alert('Error reading file');
-    };
-
-    reader.readAsText(file);
   };
 
   const handleInputChange = (step, index, field, value) => {
@@ -474,6 +408,7 @@ const generateTimetable = async () => {
 
   const handleBuildingChange = (index, value) => {
     if (value === '+Add New Building') {
+      // No action needed here as it's handled in addNewBuilding
     } else {
       const updatedData = { ...formData };
       updatedData.classes[index].building = value;
@@ -491,6 +426,17 @@ const generateTimetable = async () => {
     setFormData(updatedData);
   };
 
+  const handleFacultyModeChange = (mode) => {
+    setFacultyMode(mode);
+    if (mode === 'personal') {
+      // Clear email fields when switching to personal mode
+      setFormData(prevData => ({
+        ...prevData,
+        faculty: prevData.faculty.map(faculty => ({ ...faculty, mail: '' }))
+      }));
+    }
+  };
+
   const addNewRow = (step) => {
     const updatedData = { ...formData };
     const lastRow = updatedData[step][updatedData[step].length - 1];
@@ -505,7 +451,7 @@ const generateTimetable = async () => {
       isPreviousFilled =
         lastRow.id.trim() !== '' &&
         lastRow.name.trim() !== '' &&
-        lastRow.mail.trim() !== '';
+        (facultyMode === 'personal' || lastRow.mail.trim() !== '');
     } else if (step === 'subjects') {
       isPreviousFilled =
         lastRow.code.trim() !== '' &&
@@ -520,7 +466,7 @@ const generateTimetable = async () => {
         lastRow.strength.trim() !== '';
     } else if (step === 'timeSlots') {
       isPreviousFilled =
-        lastRow.day.trim() !== '' &&
+        lastRow.days.length > 0 &&
         lastRow.startTime.trim() !== '' &&
         lastRow.endTime.trim() !== '' &&
         lastRow.applicableTo.length > 0;
@@ -551,7 +497,7 @@ const generateTimetable = async () => {
                 ? updatedData.grades[0].classAssignmentType 
                 : 'same'
             }
-          : { day: '', startTime: '', endTime: '', applicableTo: [] }
+          : { days: [], startTime: '', endTime: '', applicableTo: [] }
       );
       setFormData(updatedData);
     }
@@ -575,7 +521,10 @@ const generateTimetable = async () => {
       );
     if (currentStep === 3)
       return formData.faculty.every(
-        (row) => row.id.trim() !== '' && row.name.trim() !== '' && row.mail.trim() !== ''
+        (row) => 
+          row.id.trim() !== '' && 
+          row.name.trim() !== '' && 
+          (facultyMode === 'personal' || row.mail.trim() !== '')
       );
     if (currentStep === 4)
       return formData.grades.every(
@@ -593,7 +542,7 @@ const generateTimetable = async () => {
     if (currentStep === 6)
       return formData.timeSlots.every(
         (row) =>
-          row.day.trim() !== '' &&
+          row.days.length > 0 &&
           row.startTime.trim() !== '' &&
           row.endTime.trim() !== '' &&
           row.applicableTo.length > 0
@@ -612,7 +561,8 @@ const generateTimetable = async () => {
             style={{ display: 'none' }}
             accept=".csv"
             onChange={(e) => {
-              handleFileUpload(e);
+              // handleFileUpload(e); // Commented out as implementation is missing
+              console.log('CSV upload not implemented');
               e.target.value = '';
             }}
           />
@@ -654,28 +604,7 @@ const generateTimetable = async () => {
                 Load Random Data
               </button>
               <button 
-                onClick={() => {
-                  const textarea = document.createElement('textarea');
-                  textarea.style.position = 'fixed';
-                  textarea.style.left = '0';
-                  textarea.style.top = '0';
-                  textarea.style.width = '100%';
-                  textarea.style.height = '50%';
-                  textarea.style.padding = '20px';
-                  textarea.style.zIndex = '9999';
-                  textarea.placeholder = 'Paste your JSON data here and click outside to load';
-                  textarea.style.boxSizing = 'border-box';
-                  
-                  textarea.addEventListener('blur', () => {
-                    if (textarea.value) {
-                      loadJSONData(textarea.value);
-                    }
-                    document.body.removeChild(textarea);
-                  });
-                  
-                  document.body.appendChild(textarea);
-                  textarea.focus();
-                }}
+                onClick={handleJSONUploadClick}
                 style={{ 
                   backgroundColor: '#4CAF50', 
                   color: 'white', 
@@ -686,8 +615,18 @@ const generateTimetable = async () => {
                   marginRight: '10px'
                 }}
               >
-                Load JSON Data
+                Upload JSON File
               </button>
+              <input
+                type="file"
+                ref={jsonFileInputRef}
+                style={{ display: 'none' }}
+                accept=".json"
+                onChange={(e) => {
+                  handleJSONUpload(e);
+                  e.target.value = '';
+                }}
+              />
             </div>
             <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
               Next
@@ -761,9 +700,11 @@ const generateTimetable = async () => {
                       </td>
                     )}
                     <td>
-                      <button className="delete-btn" onClick={() => deleteRow('classes', index)}>
-                        X
-                      </button>
+                      {formData.classes.length > 1 && (
+                        <button className="delete-btn" onClick={() => deleteRow('classes', index)}>
+                          X
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -784,9 +725,6 @@ const generateTimetable = async () => {
             >
               Add New Room
             </button>
-            <button className="upload-btn" onClick={() => handleUploadClick(2)}>
-              Upload CSV
-            </button>
             <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
               Next
             </button>
@@ -796,12 +734,34 @@ const generateTimetable = async () => {
         return (
           <div className="form-step">
             <h2>Faculty</h2>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ marginRight: '20px' }}>
+                <input
+                  type="radio"
+                  name="facultyMode"
+                  value="organization"
+                  checked={facultyMode === 'organization'}
+                  onChange={() => handleFacultyModeChange('organization')}
+                />
+                Organization Mode
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="facultyMode"
+                  value="personal"
+                  checked={facultyMode === 'personal'}
+                  onChange={() => handleFacultyModeChange('personal')}
+                />
+                Personal Mode
+              </label>
+            </div>
             <table>
               <thead>
                 <tr>
                   <th>Faculty_Id</th>
                   <th>Name</th>
-                  <th>Mail Id</th>
+                  {facultyMode === 'organization' && <th>Mail Id</th>}
                   <th>Action</th>
                 </tr>
               </thead>
@@ -822,17 +782,21 @@ const generateTimetable = async () => {
                         onChange={(e) => handleInputChange('faculty', index, 'name', e.target.value)}
                       />
                     </td>
+                    {facultyMode === 'organization' && (
+                      <td>
+                        <input
+                          type="text"
+                          value={row.mail}
+                          onChange={(e) => handleInputChange('faculty', index, 'mail', e.target.value)}
+                        />
+                      </td>
+                    )}
                     <td>
-                      <input
-                        type="text"
-                        value={row.mail}
-                        onChange={(e) => handleInputChange('faculty', index, 'mail', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <button className="delete-btn" onClick={() => deleteRow('faculty', index)}>
-                        X
-                      </button>
+                      {formData.faculty.length > 1 && (
+                        <button className="delete-btn" onClick={() => deleteRow('faculty', index)}>
+                          X
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -846,14 +810,12 @@ const generateTimetable = async () => {
                 !(
                   formData.faculty[formData.faculty.length - 1].id.trim() !== '' &&
                   formData.faculty[formData.faculty.length - 1].name.trim() !== '' &&
-                  formData.faculty[formData.faculty.length - 1].mail.trim() !== ''
+                  (facultyMode === 'personal' || 
+                   formData.faculty[formData.faculty.length - 1].mail.trim() !== '')
                 )
               }
             >
               Add New Faculty
-            </button>
-            <button className="upload-btn" onClick={() => handleUploadClick(3)}>
-              Upload CSV
             </button>
             <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
               Next
@@ -930,9 +892,11 @@ const generateTimetable = async () => {
                       </select>
                     </td>
                     <td>
-                      <button className="delete-btn" onClick={() => deleteRow('grades', index)}>
-                        X
-                      </button>
+                      {formData.grades.length > 1 && (
+                        <button className="delete-btn" onClick={() => deleteRow('grades', index)}>
+                          X
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -951,9 +915,6 @@ const generateTimetable = async () => {
               }
             >
               Add New Grade
-            </button>
-            <button className="upload-btn" onClick={() => handleUploadClick(4)}>
-              Upload CSV
             </button>
             <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
               Next
@@ -1097,7 +1058,7 @@ const generateTimetable = async () => {
                         >
                           {formData.grades.map((grade, i) => (
                             <option key={i} value={`${grade.grade} - ${grade.section}`}>
-                              {grade.grade} - {grade.section}
+                              {grade.grade} - ${grade.section}
                             </option>
                           ))}
                         </select>
@@ -1154,9 +1115,11 @@ const generateTimetable = async () => {
                         />
                       </td>
                       <td>
-                        <button className="delete-btn" onClick={() => deleteRow('subjects', index)}>
-                          X
-                        </button>
+                        {formData.subjects.length > 1 && (
+                          <button className="delete-btn" onClick={() => deleteRow('subjects', index)}>
+                            X
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1179,9 +1142,6 @@ const generateTimetable = async () => {
             >
               Add New Subject
             </button>
-            <button className="upload-btn" onClick={() => handleUploadClick(5)}>
-              Upload CSV
-            </button>
             <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
               Next
             </button>
@@ -1197,7 +1157,7 @@ const generateTimetable = async () => {
             <table>
               <thead>
                 <tr>
-                  <th>Day</th>
+                  <th>Days</th>
                   <th>Start Time</th>
                   <th>End Time</th>
                   <th>Applicable To (Grade - Section)</th>
@@ -1209,7 +1169,7 @@ const generateTimetable = async () => {
                   const isTimeOverlapping = (start, end, checkIndex) => {
                     return formData.timeSlots.some((slot, i) => {
                       if (i === checkIndex) return false;
-                      if (slot.day !== row.day) return false;
+                      if (!slot.days.some(day => row.days.includes(day))) return false;
                       const slotStart = slot.startTime;
                       const slotEnd = slot.endTime;
                       return (
@@ -1223,7 +1183,7 @@ const generateTimetable = async () => {
                   const overlappingSlots = formData.timeSlots.filter(
                     (slot, i) =>
                       i !== index &&
-                      slot.day === row.day &&
+                      slot.days.some(day => row.days.includes(day)) &&
                       isTimeOverlapping(row.startTime, row.endTime, index)
                   );
                   const usedGradeSections = new Set(
@@ -1238,10 +1198,14 @@ const generateTimetable = async () => {
                     <tr key={index}>
                       <td>
                         <select
-                          value={row.day}
-                          onChange={(e) => handleInputChange('timeSlots', index, 'day', e.target.value)}
+                          multiple
+                          value={row.days}
+                          onChange={(e) => {
+                            const selectedDays = Array.from(e.target.selectedOptions, option => option.value);
+                            handleInputChange('timeSlots', index, 'days', selectedDays);
+                          }}
+                          style={{ width: '150px', height: '100px', padding: '5px', borderRadius: '4px' }}
                         >
-                          <option value="">Select Day</option>
                           {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(
                             (day) => (
                               <option key={day} value={day}>
@@ -1278,19 +1242,21 @@ const generateTimetable = async () => {
                             handleInputChange('timeSlots', index, 'applicableTo', selectedOptions);
                           }}
                           style={{ width: '150px', height: '100px', padding: '5px', borderRadius: '4px' }}
-                          disabled={!row.day || !row.startTime || !row.endTime}
+                          disabled={row.days.length === 0 || !row.startTime || !row.endTime}
                         >
                           {availableGradeSections.map((grade, i) => (
                             <option key={i} value={`${grade.grade} - ${grade.section}`}>
-                              {grade.grade} - {grade.section}
+                              {grade.grade} - ${grade.section}
                             </option>
                           ))}
                         </select>
                       </td>
                       <td>
-                        <button className="delete-btn" onClick={() => deleteRow('timeSlots', index)}>
-                          X
-                        </button>
+                        {formData.timeSlots.length > 1 && (
+                          <button className="delete-btn" onClick={() => deleteRow('timeSlots', index)}>
+                            X
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1303,7 +1269,7 @@ const generateTimetable = async () => {
               disabled={
                 formData.timeSlots.length === 0 ||
                 !(
-                  formData.timeSlots[formData.timeSlots.length - 1].day.trim() !== '' &&
+                  formData.timeSlots[formData.timeSlots.length - 1].days.length > 0 &&
                   formData.timeSlots[formData.timeSlots.length - 1].startTime.trim() !== '' &&
                   formData.timeSlots[formData.timeSlots.length - 1].endTime.trim() !== '' &&
                   formData.timeSlots[formData.timeSlots.length - 1].applicableTo.length > 0
@@ -1311,9 +1277,6 @@ const generateTimetable = async () => {
               }
             >
               Add New Time Slot
-            </button>
-            <button className="upload-btn" onClick={() => handleUploadClick(6)}>
-              Upload CSV
             </button>
             <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
               Next
@@ -1359,7 +1322,7 @@ const generateTimetable = async () => {
                   <tr>
                     <th>Faculty_Id</th>
                     <th>Name</th>
-                    <th>Mail Id</th>
+                    {facultyMode === 'organization' && <th>Mail Id</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1367,7 +1330,7 @@ const generateTimetable = async () => {
                     <tr key={index}>
                       <td>{row.id}</td>
                       <td>{row.name}</td>
-                      <td>{row.mail}</td>
+                      {facultyMode === 'organization' && <td>{row.mail || 'N/A'}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -1430,7 +1393,7 @@ const generateTimetable = async () => {
               <table>
                 <thead>
                   <tr>
-                    <th>Day</th>
+                    <th>Days</th>
                     <th>Start Time</th>
                     <th>End Time</th>
                     <th>Applicable To (Grade - Section)</th>
@@ -1439,7 +1402,7 @@ const generateTimetable = async () => {
                 <tbody>
                   {formData.timeSlots.map((row, index) => (
                     <tr key={index}>
-                      <td>{row.day}</td>
+                      <td>{row.days.join(', ')}</td>
                       <td>{row.startTime}</td>
                       <td>{row.endTime}</td>
                       <td>{row.applicableTo.join(', ')}</td>
@@ -1449,7 +1412,6 @@ const generateTimetable = async () => {
               </table>
             </div>
             
-            {/* User Information Section */}
             <div style={{ marginBottom: '20px', background: '#f5f5f5', padding: '15px', borderRadius: '5px' }}>
               <h3>User Information</h3>
               <table>

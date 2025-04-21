@@ -89,6 +89,7 @@ const timetableSchema = new mongoose.Schema({
   subjects: [subjectSchema],
   timeSlots: [timeSlotSchema],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  type:{type:String, required:true},
   // Adding generation results
   generationResults: [generationResultSchema],
   latestGeneration: { type: Date },

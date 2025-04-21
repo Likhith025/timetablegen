@@ -108,7 +108,7 @@ If no changes are needed, add: {"needsChanges": false}`;
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY || "dKZeswS1fkyXYvrE7Eoi4jm6NWx7iDna"}`,
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
