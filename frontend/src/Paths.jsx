@@ -18,6 +18,7 @@ import ProtectedRoute from './ProtectedRoute.jsx';
 import Profile from './pages/myProfile/Profile.jsx';
 import AddProject from './pages/AddProject/AddProject.jsx';
 import ProjectDashboard from './pages/ProjectDashboard/ProjectDashboard.jsx';
+import Invitation from './pages/Invitation/Invitation.jsx';
 
 const Paths = () => {
   return (
@@ -34,7 +35,7 @@ const Paths = () => {
         <Route path="/profile" element={<Profile/>} />
         <Route path="/addproject" element={<AddProject/>} />
         <Route path="/timetable/:id" element={<ProjectDashboard/>} />
-    
+        <Route path="/invitation/:timetableId/:token" element={<Invitation />} />
       </Routes>
     </GoogleOAuthProvider>
   );

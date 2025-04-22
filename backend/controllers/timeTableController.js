@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
-import Timetable from "../model/Timetable_model.js"; // Adjust path as needed
-import User from "../model/user_model.js"; // Adjust path as needed
-
+import Timetable from "../model/Timetable_model.js";
+import User from "../model/user_model.js";
+import { sendTimetableInvitation } from "./userController.js"; // Import from userController.js
 
 export const generateTimetableDirectly = async (req, res) => {
   try {
@@ -17,8 +17,8 @@ export const generateTimetableDirectly = async (req, res) => {
       userId,
       type
     } = req.body;
-    
-    // Validate that all required data is present
+
+    // Validate required data
     if (!classes || !faculty || !grades || !subjects || !timeSlots || !type) {
       return res.status(400).json({
         success: false,
@@ -34,24 +34,57 @@ export const generateTimetableDirectly = async (req, res) => {
       });
     }
 
+    // Validate creator ID
+    const creatorId = userId || (req.user ? req.user._id : null);
+    if (!creatorId || !mongoose.Types.ObjectId.isValid(creatorId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or missing user ID for timetable creator."
+      });
+    }
+
+    // Verify creator exists
+    const creator = await User.findById(creatorId);
+    if (!creator) {
+      return res.status(404).json({
+        success: false,
+        message: "Creator user not found."
+      });
+    }
+
     // Process faculty data based on type
     let processedFaculty = faculty;
     if (type === 'personal') {
-      // Remove email fields for personal mode
       processedFaculty = faculty.map(({ id, name }) => ({ id, name, mail: '' }));
     } else {
-      // Validate email presence for organization mode
+      // Validate email presence and verify faculty emails for organization mode
       if (!faculty.every(f => f.mail && f.mail.trim() !== '')) {
         return res.status(400).json({
           success: false,
           message: "Email IDs are required for all faculty in organization mode."
         });
       }
+      const facultyEmails = faculty.map(f => f.mail);
+      const users = await User.find({ email: { $in: facultyEmails } });
+      const foundEmails = users.map(u => u.email);
+      const missingEmails = facultyEmails.filter(email => !foundEmails.includes(email));
+      if (missingEmails.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `The following faculty emails are not registered users: ${missingEmails.join(', ')}`
+        });
+      }
+      // Verify faculty IDs in subjects
+      const invalidFacultyIds = subjects.flatMap(subject => 
+        (subject.facultyIds || []).filter(id => !faculty.some(f => f.id === id))
+      );
+      if (invalidFacultyIds.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid faculty IDs in subjects: ${invalidFacultyIds.join(', ')}`
+        });
+      }
     }
-
-    // Get user ID
-    const defaultUserId = new mongoose.Types.ObjectId();
-    const creatorId = userId || (req.user ? req.user._id : defaultUserId);
 
     // Create timetable object
     const timetableData = {
@@ -69,10 +102,9 @@ export const generateTimetableDirectly = async (req, res) => {
 
     // Generate timetable schedule
     const generatedResult = generateTimetableSchedule(timetableData);
-    
+
     // Save results
     let savedTimetable = null;
-    
     try {
       const generationResultObject = {
         generatedOn: generatedResult.generatedOn,
@@ -82,14 +114,14 @@ export const generateTimetableDirectly = async (req, res) => {
         version: generatedResult.version || "1.0",
         schedules: {}
       };
-      
+
       Object.keys(generatedResult.schedules).forEach(gradeSection => {
         generationResultObject.schedules[gradeSection] = {};
         Object.keys(generatedResult.schedules[gradeSection]).forEach(day => {
           generationResultObject.schedules[gradeSection][day] = generatedResult.schedules[gradeSection][day];
         });
       });
-      
+
       const newTimetable = new Timetable({
         ...timetableData,
         generationResults: [generationResultObject],
@@ -101,16 +133,30 @@ export const generateTimetableDirectly = async (req, res) => {
       savedTimetable = await newTimetable.save();
       console.log("Timetable saved successfully with ID:", savedTimetable._id);
 
-      // Update user with timetable reference if user ID exists
-      if (userId || req.user) {
-        const updatedUser = await User.findByIdAndUpdate(
-          creatorId,
-          { $push: { timetables: savedTimetable._id } },
-          { new: true }
-        );
-        console.log("User updated with timetable reference:", updatedUser ? "Success" : "Failed");
-      } else {
-        console.log("Timetable saved with default ObjectId (no user association)");
+      // Update creator with timetable reference and owner role
+      const updatedCreator = await User.findByIdAndUpdate(
+        creatorId,
+        { $push: { timetables: { timetableId: savedTimetable._id, role: "owner" } } },
+        { new: true }
+      );
+      console.log("Creator updated with timetable reference and owner role:", updatedCreator ? "Success" : "Failed");
+
+      // Send invitation emails to faculty for organization mode
+      if (type === 'organization') {
+        for (const facultyMember of processedFaculty) {
+          const invitationResult = await sendTimetableInvitation(
+            facultyMember.mail,
+            savedTimetable._id,
+            "educator", // Assign faculty as "educator" role
+            creatorId
+          );
+          if (!invitationResult.success) {
+            console.error(`Failed to send invitation to ${facultyMember.mail}: ${invitationResult.message}`);
+            // Continue with other invitations, don't fail the entire request
+          } else {
+            console.log(`Invitation sent to ${facultyMember.mail} for timetable ${savedTimetable._id}`);
+          }
+        }
       }
     } catch (saveError) {
       console.error("Error saving timetable to database:", saveError);

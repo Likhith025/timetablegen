@@ -32,15 +32,18 @@ const Login = () => {
       });
   
       const data = await response.json();
+      console.log('Backend response:', data); // Log the response
       if (!response.ok) {
         throw new Error(data.message || 'Login failed');
       }
   
+      console.log('Saving token:', data.token); // Log the token
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
   
       navigate('/dashboard');
     } catch (err) {
+      console.error('Login error:', err); // Log any errors
       setError(err.message);
     }
   };
