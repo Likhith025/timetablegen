@@ -97,7 +97,13 @@ const timetableSchema = new mongoose.Schema({
   // Auto-save related fields
   lastAutoSave: { type: Date },
   autoSaveEnabled: { type: Boolean, default: true },
-  autoSaveInterval: { type: Number, default: 60000 }
+  autoSaveInterval: { type: Number, default: 60000 },
+  users: [
+    {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      role: { type: String, enum: ["owner", "admin", "educator"], required: true },
+    },
+  ],
 }, { timestamps: true });
 
 const Timetable = mongoose.models.Timetable || mongoose.model("Timetable", timetableSchema);
