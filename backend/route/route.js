@@ -26,6 +26,16 @@ import {
     manageTimetableUsers,
 } from "../controllers/userController.js";
 
+
+  import {     createBlockRoom,
+    getBlockRooms,
+    getBlockRoomById,
+    updateBlockRoom,
+    deleteBlockRoom,
+    getBlockRoomsByUser,
+    getAvailableSlots
+ } from "../controllers/blockRoomController.js";
+
 const AllRouter = express.Router();
 
 // User routes
@@ -117,5 +127,13 @@ AllRouter.get("/:projectId", async (req, res) => {
         });
     }
 });
+
+AllRouter.post("/br/add", createBlockRoom);
+AllRouter.get("/br/:timetableId", getBlockRooms);
+AllRouter.get("/br/:id", getBlockRoomById);
+AllRouter.put("/br/:id", updateBlockRoom);
+AllRouter.delete("/br/:id", deleteBlockRoom);
+AllRouter.get("/br/:userId", getBlockRoomsByUser);
+AllRouter.get("/br/available-slots/:timetableId", getAvailableSlots);
 
 export default AllRouter;
