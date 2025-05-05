@@ -102,6 +102,7 @@ const timetableSchema = new mongoose.Schema({
     {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       role: { type: String, enum: ["owner", "admin", "educator"], required: true },
+      accepted: {type: String, enum:["Yes","No","Pending"]},
     },
   ],
 }, { timestamps: true });

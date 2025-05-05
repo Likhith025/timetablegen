@@ -1,5 +1,15 @@
 import express from "express";
 import {
+    createBlockRoom,
+    getBlockRooms,
+    getBlockRoomById,
+    updateBlockRoom,
+    deleteBlockRoom,
+    getBlockRoomsByUser,
+    getAvailableClassrooms,
+    getAvailableTimeSlots,
+} from "../controllers/blockRoomController.js";
+import {
     generateTimetableDirectly,
     saveGenerationResults,
     getTimetablesWithResults,
@@ -23,18 +33,17 @@ import {
     verifyOtp,
     login,
     handleInvitationResponse,
-    manageTimetableUsers,
+    getAllTimetables,
+  addUserToTimetable,
+  getTimetableUsers,
+  updateTimetableUser,
+  removeTimetableUser
 } from "../controllers/userController.js";
-
-
-  import {     createBlockRoom,
-    getBlockRooms,
-    getBlockRoomById,
-    updateBlockRoom,
-    deleteBlockRoom,
-    getBlockRoomsByUser,
-    getAvailableSlots
- } from "../controllers/blockRoomController.js";
+import {
+    submitChangeRequest,
+    approveChangeRequest,
+    rejectChangeRequest,
+} from "../controllers/changeRequestController.js";
 
 const AllRouter = express.Router();
 
@@ -53,30 +62,25 @@ AllRouter.post("/user/login", login);
 AllRouter.post("/timetable/invitation", handleInvitationResponse);
 
 // Timetable user management
-AllRouter.post("/timetable/:timetableId/users", manageTimetableUsers);
-AllRouter.post("/timetable/users", manageTimetableUsers); // New route for timetableId in body
+AllRouter.post('/:id/users', addUserToTimetable);
+AllRouter.get('/:id/users', getTimetableUsers);
+AllRouter.put('/:id/users/:userId', updateTimetableUser);
+AllRouter.delete('/:id/users/:userId', removeTimetableUser);
 
 // Timetable routes
 AllRouter.post("/timetable/query", async (req, res) => {
     try {
       const { message, projectId } = req.body;
-  
-      // Validate request body
       if (!message || !projectId) {
         return res.status(400).json({ error: "Message and projectId are required" });
       }
-  
-      // Call the controller
       const response = await processTimetableQuery({ message, projectId });
-  
-      // Send the response
       res.status(200).json({ response });
     } catch (error) {
       console.error("Route error:", error.message);
       res.status(500).json({ error: "Internal server error" });
     }
-  });
-  
+});
 AllRouter.post("/:timetableId/save-generation", saveGenerationResults);
 AllRouter.get("/with-results", getTimetablesWithResults);
 AllRouter.get("/:timetableId/generation", getLatestGenerationResult);
@@ -88,52 +92,19 @@ AllRouter.post("/processRequest", processRequest);
 AllRouter.post("/applyChanges", applyChanges);
 AllRouter.post("/processChatbotMessage", processChatbotMessage);
 
-AllRouter.get("/:projectId", async (req, res) => {
-    try {
-        const { projectId } = req.params;
-        const { userId } = req.query;
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: "User ID is required",
-            });
-        }
-        const timetable = await Timetable.findById(projectId);
-        if (!timetable) {
-            return res.status(404).json({
-                success: false,
-                message: "Timetable not found",
-            });
-        }
-        const user = await User.findById(userId);
-        if (
-            !user.timetables.some((t) => t.timetableId.toString() === projectId) &&
-            timetable.createdBy._id.toString() !== userId
-        ) {
-            return res.status(403).json({
-                message: "You don't have permission to access this timetable.",
-            });
-        }
-        return res.status(200).json({
-            success: true,
-            timetable,
-        });
-    } catch (error) {
-        console.error("Error fetching timetable:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch timetable",
-            error: error.message,
-        });
-    }
-});
-
+// Block room routes
 AllRouter.post("/br/add", createBlockRoom);
 AllRouter.get("/br/:timetableId", getBlockRooms);
 AllRouter.get("/br/:id", getBlockRoomById);
 AllRouter.put("/br/:id", updateBlockRoom);
 AllRouter.delete("/br/:id", deleteBlockRoom);
-AllRouter.get("/br/:userId", getBlockRoomsByUser);
-AllRouter.get("/br/available-slots/:timetableId", getAvailableSlots);
+AllRouter.get("/br/user/:userId", getBlockRoomsByUser);
+AllRouter.get("/br/available-slots/:timetableId", getAvailableClassrooms);
+AllRouter.get("/br/available-time-slots/:timetableId", getAvailableTimeSlots);
+
+// Change request routes
+AllRouter.post("/change-request/submit", submitChangeRequest);
+AllRouter.put("/change-request/approve/:requestId", approveChangeRequest);
+AllRouter.put("/change-request/reject/:requestId", rejectChangeRequest);
 
 export default AllRouter;

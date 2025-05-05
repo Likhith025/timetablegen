@@ -29,6 +29,11 @@ const blockRoomSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Timetable.classes",
     required: true
+  },
+  gradeSection: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Timetable.grades",
+    required: true
   }
 }, { timestamps: true });
 

@@ -1,42 +1,42 @@
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { jwtDecode } from "jwt-decode";
-import API_BASE_URL from "../../src";
-import TimetableViewer from "./TimetableViewer";
-import ParametersView from "./Parameters";
-import "./ProjectSidebar.css";
-import Users from "./Users";
+import React, { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
+import API_BASE_URL from '../../src'; // Adjust path as needed
+import TimetableViewer from './TimetableViewer';
+import ParametersView from './Parameters';
+import Users from './Users';
+import './ProjectSidebar.css';
 
 const ProjectSidebar = () => {
   const [projectData, setProjectData] = useState(null);
-  const [userInfo, setUserInfo] = useState({ userId: "", userName: "", userEmail: "", userRole: "" });
+  const [userInfo, setUserInfo] = useState({ userId: '', userName: '', userEmail: '', userRole: '' });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [activeView, setActiveView] = useState("dashboard");
+  const [error, setError] = useState('');
+  const [activeView, setActiveView] = useState('timetable');
   const { id } = useParams();
 
   useEffect(() => {
-    console.log("ProjectSidebar: Mounted");
-    const token = localStorage.getItem("token");
+    console.log('ProjectSidebar: Mounted');
+    const token = localStorage.getItem('token');
     if (token) {
       try {
         const decoded = jwtDecode(token);
         setUserInfo({
-          userId: decoded.id || "",
-          userName: decoded.name || "",
-          userEmail: decoded.email || "",
-          userRole: decoded.role || "",
+          userId: decoded.id || '',
+          userName: decoded.name || '',
+          userEmail: decoded.email || '',
+          userRole: decoded.role || '',
         });
       } catch (error) {
-        console.error("ProjectSidebar: Error decoding token:", error);
+        console.error('ProjectSidebar: Error decoding token:', error);
       }
     }
 
-    const userStr = localStorage.getItem("user");
+    const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        setUserInfo(prev => ({
+        setUserInfo((prev) => ({
           ...prev,
           userId: user._id || user.id || prev.userId,
           userName: user.name || prev.userName,
@@ -44,38 +44,38 @@ const ProjectSidebar = () => {
           userRole: user.role || prev.userRole,
         }));
       } catch (error) {
-        console.error("ProjectSidebar: Error parsing user from localStorage:", error);
+        console.error('ProjectSidebar: Error parsing user from localStorage:', error);
       }
     }
 
-    console.log("ProjectSidebar: User info:", userInfo);
+    console.log('ProjectSidebar: User info:', userInfo);
   }, []);
 
   useEffect(() => {
     const fetchProjectData = async () => {
       if (!id) {
-        setError("Project ID not found");
+        setError('Project ID not found');
         setLoading(false);
         return;
       }
 
       try {
-        const token = localStorage.getItem("token");
+        const token = localStorage.getItem('token');
         const response = await fetch(`${API_BASE_URL}/all/timetables/${id}`, {
           headers: {
-            Authorization: token ? `Bearer ${token}` : "",
+            Authorization: token ? `Bearer ${token}` : '',
           },
         });
         if (!response.ok) {
-          throw new Error("Failed to fetch project data");
+          throw new Error('Failed to fetch project data');
         }
 
         const data = await response.json();
-        console.log("ProjectSidebar: Fetched project data:", data);
+        console.log('ProjectSidebar: Fetched project data:', data);
         setProjectData(data);
       } catch (err) {
-        console.error("ProjectSidebar: Error fetching project:", err);
-        setError("Error loading project data");
+        console.error('ProjectSidebar: Error fetching project:', err);
+        setError('Error loading project data');
       } finally {
         setLoading(false);
       }
@@ -89,34 +89,34 @@ const ProjectSidebar = () => {
   };
 
   const getActiveClass = (view) => {
-    return activeView === view ? "sidebar-menu-item active" : "sidebar-menu-item";
+    return activeView === view ? 'sidebar-menu-item active' : 'sidebar-menu-item';
   };
 
-  const isEducator = userInfo.userRole.toLowerCase() === "educator" ||
-    (projectData?.faculty?.some(f => f.mail.toLowerCase() === userInfo.userEmail.toLowerCase()));
-  console.log("ProjectSidebar: isEducator:", isEducator, "userRole:", userInfo.userRole);
+  const isEducator =
+    userInfo.userRole.toLowerCase() === 'educator' ||
+    (projectData?.faculty?.some((f) => f.mail.toLowerCase() === userInfo.userEmail.toLowerCase()));
 
   const getUserProjectInfo = () => {
     if (!projectData || !userInfo.userId || !userInfo.userEmail) {
-      return { name: userInfo.userName || "Unknown", role: "Unknown" };
+      return { name: userInfo.userName || 'Unknown', role: 'Unknown' };
     }
     if (projectData.createdBy?._id === userInfo.userId) {
-      return { name: userInfo.userName || projectData.createdBy.name || "Unknown", role: "Owner" };
+      return { name: userInfo.userName || projectData.createdBy.name || 'Unknown', role: 'Owner' };
     }
-    const facultyMatch = projectData.faculty?.find(f => f.mail.toLowerCase() === userInfo.userEmail.toLowerCase());
+    const facultyMatch = projectData.faculty?.find(
+      (f) => f.mail.toLowerCase() === userInfo.userEmail.toLowerCase()
+    );
     if (facultyMatch) {
-      return { name: facultyMatch.name || userInfo.userName || "Unknown", role: "Educator" };
+      return { name: facultyMatch.name || userInfo.userName || 'Unknown', role: 'Educator' };
     }
-    return { name: userInfo.userName || "Unknown", role: "Member" };
+    return { name: userInfo.userName || 'Unknown', role: 'Member' };
   };
 
   const renderActiveView = () => {
     switch (activeView) {
-      case "dashboard":
-        return <div className="view-panel">📊 Dashboard View Content</div>;
-      case "timetable":
+      case 'timetable':
         return <TimetableViewer projectId={id} userId={userInfo.userId} userRole={userInfo.userRole} />;
-      case "parameters":
+      case 'parameters':
         return (
           <ParametersView
             projectId={id}
@@ -124,14 +124,10 @@ const ProjectSidebar = () => {
             updateProjectData={updateProjectData}
           />
         );
-      case "chat":
-        return <div className="view-panel">💬 Chat View Content</div>;
-      case "block-room":
-        return <div className="view-panel">🚫 Block Room View Content</div>;
-      case "user":
-        return <Users/>;
+      case 'user':
+        return <Users />;
       default:
-        return <div className="view-panel">Select a view</div>;
+        return <TimetableViewer projectId={id} userId={userInfo.userId} userRole={userInfo.userRole} />;
     }
   };
 
@@ -147,9 +143,9 @@ const ProjectSidebar = () => {
         ) : projectData ? (
           <>
             <div className="project-info">
-              <h2 className="project-name">{projectData.projectName || "Untitled Project"}</h2>
+              <h2 className="project-name">{projectData.projectName || 'Untitled Project'}</h2>
               <p className="created-by">
-                Created by: {projectData.createdBy?.name || "Unknown"}
+                Created by: {projectData.createdBy?.name || 'Unknown'}
               </p>
               <p className="user-info">
                 You: {userProjectName} ({userProjectRole})
@@ -157,33 +153,21 @@ const ProjectSidebar = () => {
             </div>
 
             <nav className="sidebar-menu">
-              <div className={getActiveClass("dashboard")} onClick={() => setActiveView("dashboard")}>
-                <span className="menu-icon">📊</span> Dashboard
-              </div>
-              <div className={getActiveClass("timetable")} onClick={() => setActiveView("timetable")}>
+              <div className={getActiveClass('timetable')} onClick={() => setActiveView('timetable')}>
                 <span className="menu-icon">📅</span> Timetable
               </div>
               {!isEducator && (
                 <div
-                  className={getActiveClass("parameters")}
-                  onClick={() => setActiveView("parameters")}
+                  className={getActiveClass('parameters')}
+                  onClick={() => setActiveView('parameters')}
                 >
                   <span className="menu-icon">⚙️</span> Parameters
                 </div>
               )}
-              <div className={getActiveClass("chat")} onClick={() => setActiveView("chat")}>
-                <span className="menu-icon">💬</span> Chat
-              </div>
-              <div
-                className={getActiveClass("block-room")}
-                onClick={() => setActiveView("block-room")}
-              >
-                <span className="menu-icon">🚫</span> Block Room
-              </div>
               {!isEducator && (
                 <div
-                  className={getActiveClass("user")}
-                  onClick={() => setActiveView("user")}
+                  className={getActiveClass('user')}
+                  onClick={() => setActiveView('user')}
                 >
                   <span className="menu-icon">👤</span> User
                 </div>

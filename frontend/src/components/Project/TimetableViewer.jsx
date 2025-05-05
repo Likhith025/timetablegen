@@ -4,16 +4,35 @@ import API_BASE_URL from '../../src'; // Adjust path as needed
 import './TimetableViewer.css';
 import ChatbotInterface from '../ChatBot/ChatbotInterface';
 
-const TimetableViewer = () => {
+const TimetableViewer = ({ projectId, userId, userRole, userEmail }) => {
   const { id } = useParams();
   const [timetableData, setTimetableData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState('class'); // class, subject, faculty, room
   const [selectedItem, setSelectedItem] = useState('');
+  const [email, setEmail] = useState(userEmail);
+  const [educatorFound, setEducatorFound] = useState(false);
 
-  // Fetch timetable data
+  // Fetch timetable data and set the educator based on email
   useEffect(() => {
+    // Extract email from localStorage if userEmail prop is undefined
+    if (!email) {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          setEmail(user.email || 'Not found in user object');
+        } catch (err) {
+          console.error('TimetableViewer: Error parsing user from localStorage:', err);
+          setEmail('Error parsing user');
+        }
+      } else {
+        setEmail('No user item in localStorage');
+      }
+    }
+    console.log('TimetableViewer: Email from localStorage user:', email);
+
     const fetchTimetableData = async () => {
       if (!id) {
         setError('Project ID not found');
@@ -30,9 +49,19 @@ const TimetableViewer = () => {
         const data = await response.json();
         setTimetableData(data);
 
-        // Set default selected item based on view mode
-        if (data.grades && data.grades.length > 0) {
-          setSelectedItem(`${data.grades[0].grade}-${data.grades[0].section}`);
+        // Find the educator matching the email
+        if (data.faculty && data.faculty.length > 0 && email) {
+          const faculty = data.faculty.find(f => f.mail.toLowerCase() === email.toLowerCase());
+          if (faculty) {
+            setEducatorFound(true);
+            setViewMode('faculty'); // Set to "View by Educator" mode
+            setSelectedItem(faculty.id); // Set the educator's ID (e.g., 'F001' for John Smith)
+          } else {
+            // If educator not found, set default view mode to "class" and select first item
+            if (data.grades && data.grades.length > 0) {
+              setSelectedItem(`${data.grades[0].grade}-${data.grades[0].section}`);
+            }
+          }
         }
       } catch (err) {
         console.error('Error fetching timetable:', err);
@@ -43,9 +72,17 @@ const TimetableViewer = () => {
     };
 
     fetchTimetableData();
-  }, [id]);
+  }, [id, email]);
 
-  // Handle view mode change
+  // Log userEmail prop whenever it changes
+  useEffect(() => {
+    console.log('TimetableViewer: Updated logged-in user email (from prop):', userEmail);
+    if (userEmail && !email) {
+      setEmail(userEmail);
+    }
+  }, [userEmail]);
+
+  // Handle view mode change (only used if educator is not found)
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
 
@@ -63,7 +100,7 @@ const TimetableViewer = () => {
     }
   };
 
-  // Generate the list of selectable items based on view mode
+  // Generate the list of selectable items based on view mode (only used if educator is not found)
   const getSelectableItems = () => {
     if (!timetableData) return [];
 
@@ -320,65 +357,75 @@ const TimetableViewer = () => {
   if (error) return <div className="error">{error}</div>;
   if (!timetableData) return <div className="error">Timetable not found</div>;
 
+  const educator = timetableData.faculty.find(f => f.mail.toLowerCase() === email.toLowerCase());
+
   return (
     <div className="timetable-viewer">
       <div className="viewer-header">
         <h2>Timetable Viewer</h2>
-        <div className="view-mode-selector">
-          <button
-            className={viewMode === 'class' ? 'active' : ''}
-            onClick={() => handleViewModeChange('class')}
-          >
-            View by Class
-          </button>
-          <button
-            className={viewMode === 'subject' ? 'active' : ''}
-            onClick={() => handleViewModeChange('subject')}
-          >
-            View by Subject
-          </button>
-          <button
-            className={viewMode === 'faculty' ? 'active' : ''}
-            onClick={() => handleViewModeChange('faculty')}
-          >
-            View by Educator
-          </button>
-          <button
-            className={viewMode === 'room' ? 'active' : ''}
-            onClick={() => handleViewModeChange('room')}
-          >
-            View by Room
-          </button>
-        </div>
+        {/* Show view mode selector only if educator is not found */}
+        {!educator && (
+          <div className="view-mode-selector">
+            <button
+              className={viewMode === 'class' ? 'active' : ''}
+              onClick={() => handleViewModeChange('class')}
+            >
+              View by Class
+            </button>
+            <button
+              className={viewMode === 'subject' ? 'active' : ''}
+              onClick={() => handleViewModeChange('subject')}
+            >
+              View by Subject
+            </button>
+            <button
+              className={viewMode === 'faculty' ? 'active' : ''}
+              onClick={() => handleViewModeChange('faculty')}
+            >
+              View by Educator
+            </button>
+            <button
+              className={viewMode === 'room' ? 'active' : ''}
+              onClick={() => handleViewModeChange('room')}
+            >
+              View by Room
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="viewer-content">
-        <div className="item-selector">
-          <h3>
-            {viewMode === 'class'
-              ? 'Select Class'
-              : viewMode === 'subject'
-              ? 'Select Subject'
-              : viewMode === 'faculty'
-              ? 'Select Educator'
-              : 'Select Room'}
-          </h3>
-          <div className="selector-list">
-            {getSelectableItems().map(item => (
-              <div
-                key={item.id}
-                className={`selector-item ${selectedItem === item.id ? 'selected' : ''}`}
-                onClick={() => setSelectedItem(item.id)}
-              >
-                {item.name}
-              </div>
-            ))}
+        {/* Show item selector only if educator is not found */}
+        {!educator && (
+          <div className="item-selector">
+            <h3>
+              {viewMode === 'class'
+                ? 'Select Class'
+                : viewMode === 'subject'
+                ? 'Select Subject'
+                : viewMode === 'faculty'
+                ? 'Select Educator'
+                : 'Select Room'}
+            </h3>
+            <div className="selector-list">
+              {getSelectableItems().map(item => (
+                <div
+                  key={item.id}
+                  className={`selector-item ${selectedItem === item.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedItem(item.id)}
+                >
+                  {item.name}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="timetable-display">
           <h3>
-            {viewMode === 'class'
+            {educator
+              ? `Timetable for ${educator.name || 'Educator'}`
+              : viewMode === 'class'
               ? `Timetable for ${selectedItem}`
               : viewMode === 'subject'
               ? `Timetable for ${findSubjectByCode(selectedItem)?.subject || selectedItem}`

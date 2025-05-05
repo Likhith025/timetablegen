@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Timetable from "../model/Timetable_model.js";
 import User from "../model/user_model.js";
-import { sendTimetableInvitation } from "./userController.js"; // Import from userController.js
+import { sendTimetableInvitation } from "./userController.js";
 
 export const generateTimetableDirectly = async (req, res) => {
   try {
@@ -69,10 +69,16 @@ export const generateTimetableDirectly = async (req, res) => {
       const foundEmails = users.map(u => u.email);
       const missingEmails = facultyEmails.filter(email => !foundEmails.includes(email));
       if (missingEmails.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `The following faculty emails are not registered users: ${missingEmails.join(', ')}`
-        });
+        // Create new users for missing emails with pending status
+        for (const email of missingEmails) {
+          const newUser = new User({
+            email,
+            name: email.split("@")[0], // Temporary name
+            timetables: [],
+          });
+          await newUser.save();
+          users.push(newUser);
+        }
       }
       // Verify faculty IDs in subjects
       const invalidFacultyIds = subjects.flatMap(subject => 
@@ -97,7 +103,8 @@ export const generateTimetableDirectly = async (req, res) => {
       subjects,
       timeSlots,
       createdBy: creatorId,
-      type
+      type,
+      users: [{ userId: creatorId, role: "owner", accepted: "Yes" }], // Add owner to users array
     };
 
     // Generate timetable schedule
@@ -126,7 +133,7 @@ export const generateTimetableDirectly = async (req, res) => {
         ...timetableData,
         generationResults: [generationResultObject],
         latestGeneration: generatedResult.generatedOn,
-        hasGeneratedResults: true
+        hasGeneratedResults: true,
       });
 
       // Save to database
@@ -134,29 +141,60 @@ export const generateTimetableDirectly = async (req, res) => {
       console.log("Timetable saved successfully with ID:", savedTimetable._id);
 
       // Update creator with timetable reference and owner role
-      const updatedCreator = await User.findByIdAndUpdate(
+      await User.findByIdAndUpdate(
         creatorId,
-        { $push: { timetables: { timetableId: savedTimetable._id, role: "owner" } } },
+        {
+          $addToSet: {
+            timetables: { timetableId: savedTimetable._id, role: "owner", accepted: "Yes" },
+          },
+        },
         { new: true }
       );
-      console.log("Creator updated with timetable reference and owner role:", updatedCreator ? "Success" : "Failed");
+      console.log("Creator updated with timetable reference and owner role");
 
-      // Send invitation emails to faculty for organization mode
+      // Send invitation emails to faculty for organization mode and add to users array
       if (type === 'organization') {
         for (const facultyMember of processedFaculty) {
-          const invitationResult = await sendTimetableInvitation(
-            facultyMember.mail,
-            savedTimetable._id,
-            "educator", // Assign faculty as "educator" role
-            creatorId
-          );
-          if (!invitationResult.success) {
-            console.error(`Failed to send invitation to ${facultyMember.mail}: ${invitationResult.message}`);
-            // Continue with other invitations, don't fail the entire request
-          } else {
-            console.log(`Invitation sent to ${facultyMember.mail} for timetable ${savedTimetable._id}`);
+          const user = await User.findOne({ email: facultyMember.mail });
+          if (user) {
+            // Add user to timetable's users array if not already present
+            if (!savedTimetable.users.some(u => u.userId.toString() === user._id.toString())) {
+              savedTimetable.users.push({
+                userId: user._id,
+                role: "educator",
+                accepted: "Pending",
+              });
+            }
+            // Update user's timetables array
+            await User.findByIdAndUpdate(
+              user._id,
+              {
+                $addToSet: {
+                  timetables: {
+                    timetableId: savedTimetable._id,
+                    role: "educator",
+                    accepted: "Pending",
+                  },
+                },
+              },
+              { new: true }
+            );
+            // Send invitation
+            const invitationResult = await sendTimetableInvitation(
+              facultyMember.mail,
+              savedTimetable._id,
+              "educator",
+              creatorId
+            );
+            if (!invitationResult.success) {
+              console.error(`Failed to send invitation to ${facultyMember.mail}: ${invitationResult.message}`);
+            } else {
+              console.log(`Invitation sent to ${facultyMember.mail} for timetable ${savedTimetable._id}`);
+            }
           }
         }
+        // Save timetable with updated users array
+        await savedTimetable.save();
       }
     } catch (saveError) {
       console.error("Error saving timetable to database:", saveError);
@@ -167,8 +205,8 @@ export const generateTimetableDirectly = async (req, res) => {
         data: {
           input: timetableData,
           result: generatedResult,
-          saved: false
-        }
+          saved: false,
+        },
       });
     }
 
@@ -180,15 +218,15 @@ export const generateTimetableDirectly = async (req, res) => {
         input: timetableData,
         result: generatedResult,
         saved: savedTimetable !== null,
-        timetableId: savedTimetable ? savedTimetable._id : null
-      }
+        timetableId: savedTimetable ? savedTimetable._id : null,
+      },
     });
   } catch (error) {
     console.error("Error generating timetable:", error);
     res.status(500).json({
       success: false,
       message: "Failed to generate timetable",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -244,7 +282,7 @@ export const updateTimetable = async (req, res) => {
     const creatorId = userId || (req.user ? req.user._id : defaultUserId);
 
     // Find the existing timetable
-    const existingTimetable = await Timetable.findById(projectId);
+    let existingTimetable = await Timetable.findById(projectId);
     if (!existingTimetable) {
       return res.status(404).json({
         success: false,
@@ -252,20 +290,27 @@ export const updateTimetable = async (req, res) => {
       });
     }
 
+    // Ensure creator is in users array
+    if (!existingTimetable.users.some(u => u.userId.toString() === creatorId.toString())) {
+      existingTimetable.users.push({
+        userId: creatorId,
+        role: "owner",
+        accepted: "Yes",
+      });
+      await existingTimetable.save();
+    }
+
     // Process faculty data based on type
     let processedFaculty = faculty;
     if (type && faculty !== undefined) {
       if (type === 'personal') {
-        // Remove email fields for personal mode
         processedFaculty = faculty.map(({ id, name }) => ({ id, name, mail: '' }));
       } else if (type === 'organization') {
-        // If switching from personal to organization, keep existing emails or empty strings
         processedFaculty = faculty.map(fac => ({
           id: fac.id,
           name: fac.name,
-          mail: fac.mail || '' // Keep provided emails or set empty
+          mail: fac.mail || '',
         }));
-        // Validate email presence if provided
         if (faculty.some(f => f.mail && f.mail.trim() !== '')) {
           if (!faculty.every(f => f.mail && f.mail.trim() !== '')) {
             return res.status(400).json({
@@ -273,6 +318,55 @@ export const updateTimetable = async (req, res) => {
               message: "Email IDs are required for all faculty in organization mode if any are provided."
             });
           }
+          // Validate and add new faculty to users array
+          const facultyEmails = faculty.map(f => f.mail);
+          const users = await User.find({ email: { $in: facultyEmails } });
+          const foundEmails = users.map(u => u.email);
+          const missingEmails = facultyEmails.filter(email => !foundEmails.includes(email));
+          if (missingEmails.length > 0) {
+            for (const email of missingEmails) {
+              const newUser = new User({
+                email,
+                name: email.split("@")[0],
+                timetables: [{ timetableId: projectId, role: "educator", accepted: "Pending" }],
+              });
+              await newUser.save();
+              existingTimetable.users.push({
+                userId: newUser._id,
+                role: "educator",
+                accepted: "Pending",
+              });
+              await sendTimetableInvitation(email, projectId, "educator", creatorId);
+              users.push(newUser);
+            }
+            await existingTimetable.save();
+          }
+          // Update existing faculty in users array
+          for (const facultyMember of processedFaculty) {
+            const user = users.find(u => u.email === facultyMember.mail);
+            if (user && !existingTimetable.users.some(u => u.userId.toString() === user._id.toString())) {
+              existingTimetable.users.push({
+                userId: user._id,
+                role: "educator",
+                accepted: "Pending",
+              });
+              await User.findByIdAndUpdate(
+                user._id,
+                {
+                  $addToSet: {
+                    timetables: {
+                      timetableId: projectId,
+                      role: "educator",
+                      accepted: "Pending",
+                    },
+                  },
+                },
+                { new: true }
+              );
+              await sendTimetableInvitation(facultyMember.mail, projectId, "educator", creatorId);
+            }
+          }
+          await existingTimetable.save();
         }
       }
     }
@@ -337,12 +431,10 @@ export const updateTimetable = async (req, res) => {
         Object.keys(generatedResult.schedules).forEach((gradeSection) => {
           generationResultObject.schedules[gradeSection] = {};
           Object.keys(generatedResult.schedules[gradeSection]).forEach((day) => {
-            generationResultObject.schedules[gradeSection][day] =
-              generatedResult.schedules[gradeSection][day];
+            generationResultObject.schedules[gradeSection][day] = generatedResult.schedules[gradeSection][day];
           });
         });
 
-        // Replace generationResults with only the new schedule
         updateData.generationResults = [generationResultObject];
         updateData.latestGeneration = generatedResult.generatedOn;
         updateData.hasGeneratedResults = true;
@@ -359,18 +451,18 @@ export const updateTimetable = async (req, res) => {
       // Update user with timetable reference if not already included
       if (userId || req.user) {
         const user = await User.findById(creatorId);
-        if (user && !user.timetables.includes(projectId)) {
-          const updatedUser = await User.findByIdAndUpdate(
+        if (user && !user.timetables.some(t => t.timetableId.toString() === projectId)) {
+          await User.findByIdAndUpdate(
             creatorId,
-            { $addToSet: { timetables: projectId } },
+            {
+              $addToSet: {
+                timetables: { timetableId: projectId, role: "owner", accepted: "Yes" },
+              },
+            },
             { new: true }
           );
-          console.log("User updated with timetable reference:", updatedUser ? "Success" : "Failed");
-        } else {
-          console.log("Timetable already associated with user or user not found.");
+          console.log("User updated with timetable reference");
         }
-      } else {
-        console.log("Timetable updated with default ObjectId (no user association)");
       }
     } catch (saveError) {
       console.error("Error updating timetable in database:", saveError);
@@ -409,7 +501,8 @@ export const updateTimetable = async (req, res) => {
     });
   }
 };
-function generateTimetableSchedule(timetableData) {
+
+export const generateTimetableSchedule = (timetableData) => {
   const schedules = {};
   const conflicts = [];
   
@@ -626,7 +719,7 @@ function generateTimetableSchedule(timetableData) {
     });
   });
 
-  // STEP 1.5: Ensure all subjects get scheduled
+  // STEP 1.5: Ensure all subjects getscheduled
   timetableData.subjects.forEach(subject => {
     const weeklyClasses = parseInt(subject.classesWeek);
     if (weeklyClasses <= 0) return;
@@ -983,7 +1076,7 @@ function generateTimetableSchedule(timetableData) {
     algorithm: "consistent-grade-section",
     version: "1.0"
   };
-}
+};
 
 export const saveGenerationResults = async (req, res) => {
   try {
@@ -1017,23 +1110,19 @@ export const saveGenerationResults = async (req, res) => {
       generationResults.generatedOn = new Date();
     }
 
-    // Convert the schedules object to proper format for MongoDB Map
-    const schedulesMap = new Map();
-    
+    // Convert the schedules object to proper format for MongoDB
+    const schedulesObject = {};
     for (const [gradeSection, daySchedules] of Object.entries(generationResults.schedules)) {
-      const dayScheduleMap = new Map();
-      
+      schedulesObject[gradeSection] = {};
       for (const [day, assignments] of Object.entries(daySchedules)) {
-        dayScheduleMap.set(day, assignments);
+        schedulesObject[gradeSection][day] = assignments;
       }
-      
-      schedulesMap.set(gradeSection, dayScheduleMap);
     }
     
     // Update the generationResults with the correctly formatted schedules
     const formattedResult = {
       ...generationResults,
-      schedules: schedulesMap
+      schedules: schedulesObject
     };
 
     // Update the timetable with the new generation results
@@ -1068,7 +1157,6 @@ export const saveGenerationResults = async (req, res) => {
   }
 };
 
-// Get all timetables with generated results for a user
 export const getTimetablesWithResults = async (req, res) => {
   try {
     const userId = req.user?._id || req.query.userId;
@@ -1101,7 +1189,6 @@ export const getTimetablesWithResults = async (req, res) => {
   }
 };
 
-// Get the latest generation result for a specific timetable
 export const getLatestGenerationResult = async (req, res) => {
   try {
     const { timetableId } = req.params;
@@ -1137,11 +1224,10 @@ export const getLatestGenerationResult = async (req, res) => {
     };
     
     // Convert the schedules Map to a plain object
-    latestResult.schedules.forEach((daySchedules, gradeSection) => {
+    Object.keys(latestResult.schedules).forEach((gradeSection) => {
       formattedResult.schedules[gradeSection] = {};
-      
-      daySchedules.forEach((assignments, day) => {
-        formattedResult.schedules[gradeSection][day] = assignments;
+      Object.keys(latestResult.schedules[gradeSection]).forEach((day) => {
+        formattedResult.schedules[gradeSection][day] = latestResult.schedules[gradeSection][day];
       });
     });
 
@@ -1163,7 +1249,6 @@ export const getLatestGenerationResult = async (req, res) => {
     });
   }
 };
-
 
 export const getTimetablesByUser = async (req, res) => {
   try {
@@ -1197,19 +1282,22 @@ export const getTimetableById = async (req, res) => {
       return res.status(400).json({ message: "Timetable ID is required." });
     }
 
-    // Use populate to get the creator's name from the User model
-    const timetable = await Timetable.findById(id).populate({
-      path: 'createdBy',
-      model: 'User',
-      select: 'name' // Only get the name field from User model
-    });
+    const timetable = await Timetable.findById(id)
+      .populate({
+        path: 'createdBy',
+        model: 'User',
+        select: 'name email',
+      })
+      .populate({
+        path: 'users.userId',
+        model: 'User',
+        select: 'name email',
+      });
 
     if (!timetable) {
       return res.status(404).json({ message: "Timetable not found." });
     }
 
-    // Only check permissions if authentication is being used
-    // and req.user exists with an _id property
     if (req.user && req.user._id && timetable.createdBy && timetable.createdBy._id) {
       if (timetable.createdBy._id.toString() !== req.user._id.toString()) {
         return res.status(403).json({ message: "You don't have permission to access this timetable." });
@@ -1219,16 +1307,136 @@ export const getTimetableById = async (req, res) => {
     res.status(200).json(timetable);
   } catch (error) {
     console.error("Error fetching timetable by ID:", error);
-    
-    // Check if error is due to invalid ID format
     if (error.name === 'CastError' && error.kind === 'ObjectId') {
       return res.status(400).json({ message: "Invalid timetable ID format." });
     }
-    
     res.status(500).json({ message: "Internal server error." });
   }
 };
 
+export const manageTimetableUsers = async (req, res) => {
+  try {
+    const { timetableId, action, userEmail, role, userId } = req.body;
+
+    // Validate inputs
+    if (!userId) {
+      return res.status(400).json({ message: "Requesting user ID is required" });
+    }
+    if (!timetableId) {
+      return res.status(400).json({ message: "Timetable ID is required" });
+    }
+
+    // Find timetable
+    const timetable = await Timetable.findById(timetableId);
+    if (!timetable) {
+      return res.status(404).json({ message: "Timetable not found" });
+    }
+
+    // Check if the requesting user is the owner
+    const isOwner = timetable.createdBy.toString() === userId;
+    if (!isOwner) {
+      return res.status(403).json({ message: "Only the owner can manage users" });
+    }
+
+    // Find user by email (if needed for the action)
+    const user = userEmail ? await User.findOne({ email: userEmail }) : null;
+
+    switch (action) {
+      case "add":
+        // Validate inputs for add action
+        if (!userEmail || !role) {
+          return res.status(400).json({ message: "User email and role are required" });
+        }
+        if (!user) {
+          // Create a new user with pending invitation
+          const newUser = new User({
+            email: userEmail,
+            name: userEmail.split("@")[0], // Temporary name
+            timetables: [{ timetableId, role, accepted: "Pending" }],
+          });
+          await newUser.save();
+          timetable.users.push({ userId: newUser._id, role, accepted: "Pending" });
+          await timetable.save();
+          const invitationResult = await sendTimetableInvitation(userEmail, timetableId, role, userId);
+          return res.status(invitationResult.success ? 200 : 400).json({ message: invitationResult.message });
+        }
+        // Check if user is already associated with the timetable
+        if (timetable.users.some((u) => u.userId.toString() === user._id.toString())) {
+          return res.status(400).json({ message: "User already associated with timetable" });
+        }
+        // Add user to timetable and user model
+        timetable.users.push({ userId: user._id, role, accepted: "Pending" });
+        user.timetables.push({ timetableId, role, accepted: "Pending" });
+        await Promise.all([timetable.save(), user.save()]);
+        const invitationResult = await sendTimetableInvitation(userEmail, timetableId, role, userId);
+        return res.status(invitationResult.success ? 200 : 400).json({ message: invitationResult.message });
+
+      case "remove":
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        // Remove user from timetable and user model
+        timetable.users = timetable.users.filter((u) => u.userId.toString() !== user._id.toString());
+        user.timetables = user.timetables.filter((t) => t.timetableId.toString() !== timetableId);
+        await Promise.all([timetable.save(), user.save()]);
+        return res.status(200).json({ message: "User removed from timetable" });
+
+      case "changeRole":
+        if (!user || !role) {
+          return res.status(400).json({ message: "User and role are required" });
+        }
+        // Update role in both timetable and user model
+        const timetableUser = timetable.users.find((u) => u.userId.toString() === user._id.toString());
+        if (!timetableUser) {
+          return res.status(404).json({ message: "User not associated with timetable" });
+        }
+        timetableUser.role = role;
+        const userTimetable = user.timetables.find((t) => t.timetableId.toString() === timetableId);
+        if (userTimetable) {
+          userTimetable.role = role;
+        }
+        await Promise.all([timetable.save(), user.save()]);
+        return res.status(200).json({ message: "User role updated" });
+
+      case "acceptInvitation":
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        // Accept invitation (user must be the one accepting)
+        if (user._id.toString() !== userId) {
+          return res.status(403).json({ message: "Only the invited user can accept the invitation" });
+        }
+        const tUser = timetable.users.find((u) => u.userId.toString() === user._id.toString());
+        const uTimetable = user.timetables.find((t) => t.timetableId.toString() === timetableId);
+        if (!tUser || !uTimetable) {
+          return res.status(404).json({ message: "Invitation not found" });
+        }
+        tUser.accepted = "Yes";
+        uTimetable.accepted = "Yes";
+        await Promise.all([timetable.save(), user.save()]);
+        return res.status(200).json({ message: "Invitation accepted" });
+
+      case "rejectInvitation":
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+        // Reject invitation (user must be the one rejecting)
+        if (user._id.toString() !== userId) {
+          return res.status(403).json({ message: "Only the invited user can reject the invitation" });
+        }
+        timetable.users = timetable.users.filter((u) => u.userId.toString() !== user._id.toString());
+        user.timetables = user.timetables.filter((t) => t.timetableId.toString() !== timetableId);
+        await Promise.all([timetable.save(), user.save()]);
+        return res.status(200).json({ message: "Invitation rejected" });
+
+      default:
+        return res.status(400).json({ message: "Invalid action" });
+    }
+  } catch (error) {
+    console.error("Error managing timetable users:", error);
+    res.status(500).json({ message: "Error managing timetable users", error: error.message });
+  }
+};
 
 //////
 
