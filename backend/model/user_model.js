@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: function() { return this.loginType === "Email"; } },
     userId: { type: String },
-    loginType: { type: String, enum: ["Google", "Email"], required: true },
+    loginType: { type: String, enum: ["Google", "Email"] },
     role: { type: String, enum: ["admin", "user"], default: "user", required: true },
     timetables: [
         {

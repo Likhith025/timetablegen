@@ -116,7 +116,7 @@ const TopBar = () => {
       />
 
       <div className="topbar-user" ref={dropdownRef}>
-        <div className="user-info">
+        <div className="user-info-top">
           <p><strong>{userName || "User"}</strong></p>
           {userRole.toLowerCase() === "admin" && <p className="role">Admin</p>}
         </div>

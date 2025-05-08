@@ -1,3 +1,4 @@
+// routes/AllRouter.js
 import express from "express";
 import {
     createBlockRoom,
@@ -16,11 +17,11 @@ import {
     getLatestGenerationResult,
     getTimetablesByUser,
     getTimetableById,
-    updateTimetable,
     processRequest,
     applyChanges,
     processChatbotMessage,
 } from "../controllers/timeTableController.js";
+import { updateTimetable } from "../controllers/timetableUpdateController.js";
 import { processTimetableQuery } from "../controllers/chatBotController.js";
 import {
     sendEmailOTP,
@@ -34,10 +35,10 @@ import {
     login,
     handleInvitationResponse,
     getAllTimetables,
-  addUserToTimetable,
-  getTimetableUsers,
-  updateTimetableUser,
-  removeTimetableUser
+    addUserToTimetable,
+    getTimetableUsers,
+    updateTimetableUser,
+    removeTimetableUser
 } from "../controllers/userController.js";
 import {
     submitChangeRequest,
@@ -87,7 +88,7 @@ AllRouter.get("/:timetableId/generation", getLatestGenerationResult);
 AllRouter.post("/generate-direct", generateTimetableDirectly);
 AllRouter.get("/user/:userId", getTimetablesByUser);
 AllRouter.get("/timetables/:id", getTimetableById);
-AllRouter.patch("/timetables/:projectId", updateTimetable);
+AllRouter.patch("/update/timetables/:id", updateTimetable); // Updated route
 AllRouter.post("/processRequest", processRequest);
 AllRouter.post("/applyChanges", applyChanges);
 AllRouter.post("/processChatbotMessage", processChatbotMessage);

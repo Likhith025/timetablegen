@@ -94,4 +94,7 @@ All core documents are available in the docs/ folder:
 
 📘 Software Design Document (SDD)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 2020269 (Commit)

@@ -1,3 +1,4 @@
+/* General Timetable Viewer Styling */
 .timetable-viewer {
   background-color: white;
   border-radius: 8px;
@@ -112,12 +113,133 @@
   z-index: 1;
 }
 
+.timetable-display h4 {
+  margin-top: 20px;
+  margin-bottom: 10px;
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  background-color: white;
+  padding: 5px 0;
+  z-index: 1;
+}
+
+.timetable-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  position: sticky;
+  top: 0;
+  background-color: white;
+  z-index: 2;
+  padding: 5px 0;
+}
+
+.tab-selector {
+  display: flex;
+  gap: 10px;
+}
+
+.tab-selector button {
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.tab-selector button:hover {
+  background-color: #e8f0fe;
+}
+
+.tab-selector button.active {
+  background-color: #1a73e8;
+  color: white;
+  border-color: #1a73e8;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.edit-mode-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.edit-mode-button.enable {
+  background: linear-gradient(135deg, #34c759, #28a745);
+  color: white;
+}
+
+.edit-mode-button.enable:hover {
+  background: linear-gradient(135deg, #2fb54f, #239c3e);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.edit-mode-button.disable {
+  background: linear-gradient(135deg, #ff3d00, #d32f2f);
+  color: white;
+}
+
+.edit-mode-button.disable:hover {
+  background: linear-gradient(135deg, #e63600, #c12727);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.save-button {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #1a73e8, #0d47a1);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  animation: pulse 2s infinite ease-in-out;
+}
+
+.save-button:hover {
+  background: linear-gradient(135deg, #1565c0, #0b3d91);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+  }
+  100% {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+}
+
 .timetable-grid {
   width: 100%;
   border: 1px solid #ccc;
   border-radius: 4px;
   overflow: auto;
   max-height: calc(100vh - 250px);
+  margin-bottom: 20px;
 }
 
 .timetable-grid table {
@@ -159,9 +281,9 @@
   justify-content: space-between;
 }
 
-/* Free period styling - empty white cell */
+/* Free period styling - subtle grayish-blue tint */
 .timetable-grid .free-period {
-  background-color: white;
+  background-color: #f5f7fa;
   min-height: 110px;
 }
 
@@ -222,6 +344,96 @@
   padding-top: 5px;
 }
 
+/* Amazing Drag-and-Drop Styling */
+.class-cell-content {
+  transition: all 0.3s ease;
+  position: relative;
+  border-radius: 4px;
+  padding: 5px;
+}
+
+.class-cell-content:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.class-cell-content:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.3);
+}
+
+.empty-slot {
+  transition: all 0.3s ease;
+  border-radius: 4px;
+  padding: 5px;
+}
+
+/* Styling for the slot being dragged (in the grid, hidden but styles applied for consistency) */
+.class-cell-content[aria-pressed="true"],
+.empty-slot[aria-pressed="true"] {
+  opacity: 0 !important;
+}
+
+/* Styling for the target slot (when dragging over) */
+.class-cell-content[style*="border: 2px dashed #000"],
+.empty-slot[style*="border: 2px dashed #000"] {
+  background-color: #f0f0f0;
+  border: 2px dashed #1a73e8 !important;
+  box-shadow: 0 0 10px rgba(26, 115, 232, 0.3);
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+}
+
+/* Styling for the dragged item in the DragOverlay */
+.dnd-drag-overlay .class-cell-content,
+.dnd-drag-overlay .empty-slot {
+  background: linear-gradient(145deg, #e6f3ff, #d0e7ff);
+  border: 2px solid #1a73e8;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(26, 115, 232, 0.5);
+  transform: scale(1.1) rotate(2deg);
+  opacity: 0.9;
+  animation: glowPulse 1.5s infinite ease-in-out;
+  cursor: grabbing;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+/* Glow pulse animation for the dragged item */
+@keyframes glowPulse {
+  0% {
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(26, 115, 232, 0.5);
+  }
+  50% {
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2), 0 0 25px rgba(26, 115, 232, 0.7);
+  }
+  100% {
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2), 0 0 15px rgba(26, 115, 232, 0.5);
+  }
+}
+
+/* Ensure the dragged item’s text remains readable */
+.dnd-drag-overlay .class-cell-content .subject,
+.dnd-drag-overlay .class-cell-content .teacher,
+.dnd-drag-overlay .class-cell-content .room,
+.dnd-drag-overlay .class-cell-content .grade-section {
+  color: #333;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+/* Styling for the "All View" layout */
+.all-timetables {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.timetable-section {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+  background-color: #fafafa;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .viewer-content {
@@ -246,5 +458,21 @@
   .selector-item {
     flex: 1 0 calc(50% - 5px);
     min-width: 120px;
+  }
+
+  .timetable-controls {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .action-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .edit-mode-button,
+  .save-button {
+    width: 48%;
   }
 }

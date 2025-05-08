@@ -4,6 +4,7 @@ import TopBar from '../../components/TopBar/TopBar';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from "jwt-decode";
 import API_BASE_URL from '../../src';
+import Select from 'react-select';
 
 // Sample data for random generation
 const sampleData = {
@@ -73,7 +74,10 @@ const MultiStepForm = () => {
   const [userId, setUserId] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
-  const [facultyMode, setFacultyMode] = useState('organization'); // 'organization' or 'personal'
+  const [facultyMode, setFacultyMode] = useState('organization');
+  const [warningMessage, setWarningMessage] = useState("");
+  const [isTimeSlotsValid, setIsTimeSlotsValid] = useState(true);
+  const [isFieldsValid, setIsFieldsValid] = useState(true);
   const [formData, setFormData] = useState({
     projectName: '',
     classes: [{ room: '', capacity: '', building: '' }],
@@ -103,37 +107,127 @@ const MultiStepForm = () => {
   const fileInputRef = useRef(null);
   const jsonFileInputRef = useRef(null);
 
-  // Get user info from localStorage or token
+  // Custom styles for most multi-select dropdowns with wrapping (200px width)
+  const customStylesWideWithWrap = {
+    control: (provided) => ({
+      ...provided,
+      border: '1px solid #ccc',
+      borderRadius: '4px',
+      padding: '2px',
+      minHeight: '38px',
+      fontSize: '14px',
+      width: '200px',
+      flexWrap: 'wrap',
+    }),
+    menu: (provided) => ({
+      ...provided,
+      zIndex: 9999, // Increased z-index to ensure dropdown appears on top
+      fontSize: '14px',
+      width: '200px',
+    }),
+    option: (provided, state) => ({
+      ...provided,
+      padding: '8px 12px',
+      backgroundColor: state.isSelected ? '#007bff' : state.isFocused ? '#f0f0f0' : null,
+      color: state.isSelected ? 'white' : '#333',
+    }),
+    multiValue: (provided) => ({
+      ...provided,
+      backgroundColor: '#e0e0e0',
+      borderRadius: '2px',
+      margin: '2px',
+    }),
+    multiValueLabel: (provided) => ({
+      ...provided,
+      color: '#333',
+      fontSize: '12px',
+      whiteSpace: 'nowrap',
+    }),
+    multiValueRemove: (provided) => ({
+      ...provided,
+      ':hover': {
+        backgroundColor: '#ff4d4f',
+        color: 'white',
+      },
+    }),
+    valueContainer: (provided) => ({
+      ...provided,
+      flexWrap: 'wrap',
+      padding: '2px 4px',
+    }),
+  };
+
+  // Custom styles for Faculty dropdown with extra wide width (250px) and wrapping
+  const customStylesExtraWideWithWrap = {
+    control: (provided) => ({
+      ...provided,
+      border: '1px solid #ccc',
+      borderRadius: '4px',
+      padding: '2px',
+      minHeight: '38px',
+      fontSize: '14px',
+      width: '250px',
+      flexWrap: 'wrap',
+    }),
+    menu: (provided) => ({
+      ...provided,
+      zIndex: 9999, // Increased z-index to ensure dropdown appears on top
+      fontSize: '14px',
+      width: '250px',
+    }),
+    option: (provided, state) => ({
+      ...provided,
+      padding: '8px 12px',
+      backgroundColor: state.isSelected ? '#007bff' : state.isFocused ? '#f0f0f0' : null,
+      color: state.isSelected ? 'white' : '#333',
+    }),
+    multiValue: (provided) => ({
+      ...provided,
+      backgroundColor: '#e0e0e0',
+      borderRadius: '2px',
+      margin: '2px',
+    }),
+    multiValueLabel: (provided) => ({
+      ...provided,
+      color: '#333',
+      fontSize: '12px',
+      whiteSpace: 'nowrap',
+    }),
+    multiValueRemove: (provided) => ({
+      ...provided,
+      ':hover': {
+        backgroundColor: '#ff4d4f',
+        color: 'white',
+      },
+    }),
+    valueContainer: (provided) => ({
+      ...provided,
+      flexWrap: 'wrap',
+      padding: '2px 4px',
+    }),
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
-    console.log("Token found:", token ? "Yes" : "No");
-    
     if (token) {
       try {
         const decoded = jwtDecode(token);
-        console.log("Decoded token:", decoded);
-        
         if (decoded && decoded.id) {
           setUserId(decoded.id);
           if (decoded.name) setUserName(decoded.name);
-          console.log("User ID set from token:", decoded.id);
         }
       } catch (error) {
         console.error("Error decoding token:", error);
       }
     }
-    
     try {
       const userStr = localStorage.getItem("user");
       if (userStr) {
         const user = JSON.parse(userStr);
-        console.log("User from localStorage:", user);
-        
         if (user && user._id) {
           setUserId(user._id);
           if (user.name) setUserName(user.name);
           if (user.email) setUserEmail(user.email);
-          console.log("User ID set from localStorage:", user._id);
         }
       }
     } catch (error) {
@@ -141,43 +235,58 @@ const MultiStepForm = () => {
     }
   }, []);
 
+  // Effect to validate time slots whenever formData changes
+  useEffect(() => {
+    if (currentStep === 6) {
+      // Basic field validation
+      const fieldsValid = formData.timeSlots.every(
+        (row) =>
+          row.days.length > 0 &&
+          row.startTime.trim() !== '' &&
+          row.endTime.trim() !== '' &&
+          row.applicableTo.length > 0
+      );
+      setIsFieldsValid(fieldsValid);
+
+      if (fieldsValid) {
+        const { isValid, message } = validateTimeSlots();
+        setIsTimeSlotsValid(isValid);
+        setWarningMessage(isValid ? "" : message);
+      } else {
+        setIsTimeSlotsValid(true);
+        setWarningMessage("Please fill in all fields for each time slot.");
+      }
+    } else {
+      setWarningMessage("");
+      setIsFieldsValid(true);
+      setIsTimeSlotsValid(true);
+    }
+  }, [formData.timeSlots, formData.subjects, formData.grades, currentStep]);
+
   const generateTimetable = async () => {
+    if (!isFieldsValid || !isTimeSlotsValid) {
+      const { isValid, message } = validateTimeSlots();
+      setWarningMessage(isFieldsValid && !isValid ? message : "Please fill in all fields for each time slot.");
+      return;
+    }
+
     try {
       setIsGenerating(true);
-      
-      console.log("=== Timetable Generation Started ===");
-      console.log("Raw Form Data:", JSON.parse(JSON.stringify(formData)));
-
-      if (!userId) {
-        console.warn("No user ID available. Using a token-based authorization instead.");
-      }
-      
-      // Transform timeSlots to have single day entries for backend
       const transformedTimeSlots = formData.timeSlots.flatMap(slot => 
         slot.days.map(day => ({
-          day, // Single day for backend
+          day,
           startTime: slot.startTime,
           endTime: slot.endTime,
           applicableTo: slot.applicableTo
         }))
       );
-
-      console.log("Transformed Time Slots:", transformedTimeSlots);
-
       const requestData = {
         ...formData,
         timeSlots: transformedTimeSlots,
         userId: userId,
-        type: facultyMode // Add type based on facultyMode
+        type: facultyMode
       };
-      
-      console.log("Request Payload Sent to Backend:", JSON.parse(JSON.stringify(requestData)));
-      console.log("Sending timetable generation request with user ID:", userId);
-      console.log("API Endpoint:", `${API_BASE_URL}/all/generate-direct`);
-
       const token = localStorage.getItem("token");
-      console.log("Authorization Token:", token ? `Bearer ${token}` : "No token provided");
-      
       const response = await fetch(`${API_BASE_URL}/all/generate-direct`, {
         method: 'POST',
         headers: {
@@ -186,62 +295,34 @@ const MultiStepForm = () => {
         },
         body: JSON.stringify(requestData)
       });
-      
-      console.log("API Response Status:", response.status, response.statusText);
-
       const responseData = await response.json();
-      console.log("API Response Data:", responseData);
-
       if (!response.ok) {
-        const errorData = responseData || {};
-        throw new Error(errorData.message || 'Failed to generate timetable');
+        throw new Error(responseData.message || 'Failed to generate timetable');
       }
-      
-      if (responseData.success) {
-        if (responseData.data && responseData.data.timetableId) {
-          console.log("Timetable Generated Successfully. Timetable ID:", responseData.data.timetableId);
-          navigate(`/timetable/${responseData.data.timetableId}`);
-        } else {
-          console.error("Missing timetableId in response:", responseData);
-          alert("Timetable was generated but ID is missing. Please check your timetables list.");
-        }
+      if (responseData.success && responseData.data && responseData.data.timetableId) {
+        navigate(`/timetable/${responseData.data.timetableId}`);
       } else {
         throw new Error(responseData.message || 'Invalid response data');
       }
     } catch (error) {
-      console.error("=== Timetable Generation Failed ===");
       console.error('Error generating timetable:', error);
-      console.error('Error Details:', {
-        message: error.message,
-        stack: error.stack
-      });
       alert(`Failed to generate timetable: ${error.message || 'Unknown error'}`);
     } finally {
-      console.log("=== Timetable Generation Completed ===");
       setIsGenerating(false);
     }
-  };  
+  };
 
   const handleJSONUpload = (event) => {
     const file = event.target.files[0];
-    if (!file) {
-      console.log('No file selected');
-      return;
-    }
-
-    if (!file.name.endsWith('.json')) {
-      console.error('Please upload a JSON file');
+    if (!file || !file.name.endsWith('.json')) {
       alert('Please upload a JSON file');
       return;
     }
-
     const reader = new FileReader();
-    
     reader.onload = (e) => {
       try {
         const json = e.target.result;
         const parsedData = JSON.parse(json);
-        
         if (
           parsedData.projectName &&
           Array.isArray(parsedData.classes) &&
@@ -255,7 +336,6 @@ const MultiStepForm = () => {
             buildings: parsedData.buildings || [],
             multipleBuildings: parsedData.multipleBuildings || false
           });
-          // Set facultyMode based on parsedData.type if available
           if (parsedData.type) {
             setFacultyMode(parsedData.type);
           }
@@ -268,12 +348,10 @@ const MultiStepForm = () => {
         alert('Failed to parse JSON data. Please check the format.');
       }
     };
-
     reader.onerror = (error) => {
       console.error('Error reading file:', error);
       alert('Error reading JSON file');
     };
-
     reader.readAsText(file);
   };
 
@@ -297,7 +375,7 @@ const MultiStepForm = () => {
       }
     }
   };
-  
+
   const loadRandomData = () => {
     setFormData({
       ...formData,
@@ -332,9 +410,14 @@ const MultiStepForm = () => {
   };
 
   const handleInputChange = (step, index, field, value) => {
-    const updatedData = { ...formData };
-    updatedData[step][index][field] = value;
-    setFormData(updatedData);
+    setFormData(prevData => {
+      const updatedData = { ...prevData };
+      const updatedStepData = [...updatedData[step]];
+      updatedStepData[index] = { ...updatedStepData[index], [field]: value };
+      updatedData[step] = updatedStepData;
+      console.log(`Updated ${step}[${index}].${field}:`, value);
+      return updatedData;
+    });
   };
 
   const handleMultipleBuildingsChange = (e) => {
@@ -417,19 +500,24 @@ const MultiStepForm = () => {
   };
 
   const handleGradeSectionChange = (index, selectedOptions) => {
-    const selectedValues = Array.from(selectedOptions).map((option) => option.value);
-    const updatedData = { ...formData };
-    updatedData.subjects[index].gradeSections = selectedValues.map((value) => {
-      const [grade, section] = value.split(' - ');
-      return { grade, section };
+    const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
+    setFormData(prevData => {
+      const updatedSubjects = [...prevData.subjects];
+      updatedSubjects[index] = {
+        ...updatedSubjects[index],
+        gradeSections: selectedValues.map(value => {
+          const [grade, section] = value.split(' - ');
+          return { grade, section };
+        })
+      };
+      console.log(`Row ${index} - Updated gradeSections:`, updatedSubjects[index].gradeSections);
+      return { ...prevData, subjects: updatedSubjects };
     });
-    setFormData(updatedData);
   };
 
   const handleFacultyModeChange = (mode) => {
     setFacultyMode(mode);
     if (mode === 'personal') {
-      // Clear email fields when switching to personal mode
       setFormData(prevData => ({
         ...prevData,
         faculty: prevData.faculty.map(faculty => ({ ...faculty, mail: '' }))
@@ -509,6 +597,74 @@ const MultiStepForm = () => {
     setFormData(updatedData);
   };
 
+  // Validate time slots sufficiency
+  const validateTimeSlots = () => {
+    const requiredSlots = {};
+    formData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade} - ${grade.section}`;
+      requiredSlots[gradeSection] = 0;
+    });
+
+    formData.subjects.forEach((subject, index) => {
+      const classesPerWeek = parseInt(subject.classesWeek, 10) || 0;
+      if (classesPerWeek > 0 && subject.gradeSections.length > 0) {
+        subject.gradeSections.forEach(gs => {
+          const gradeSection = `${gs.grade} - ${gs.section}`;
+          if (requiredSlots.hasOwnProperty(gradeSection)) {
+            requiredSlots[gradeSection] += classesPerWeek;
+          } else {
+            console.warn(`Grade-section ${gradeSection} not found in grades list for subject ${index}`);
+          }
+        });
+      }
+    });
+
+    console.log("Required slots per grade-section:", requiredSlots);
+
+    const availableSlots = {};
+    formData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade} - ${grade.section}`;
+      availableSlots[gradeSection] = 0;
+    });
+
+    formData.timeSlots.forEach((slot, index) => {
+      if (slot.days.length > 0 && slot.applicableTo.length > 0) {
+        const slotCount = slot.days.length;
+        slot.applicableTo.forEach(gradeSection => {
+          if (availableSlots.hasOwnProperty(gradeSection)) {
+            availableSlots[gradeSection] += slotCount;
+          } else {
+            console.warn(`Grade-section ${gradeSection} in time slot ${index} not found in grades list`);
+          }
+        });
+      }
+    });
+
+    console.log("Available slots per grade-section:", availableSlots);
+
+    const insufficientSlots = [];
+    for (const gradeSection in requiredSlots) {
+      const required = requiredSlots[gradeSection];
+      const available = availableSlots[gradeSection] || 0;
+      if (required > 0 && available < required) {
+        insufficientSlots.push(
+          `${gradeSection}: Requires ${required} slots, but only ${available} are available.`
+        );
+      }
+    }
+
+    console.log("Insufficient slots:", insufficientSlots);
+
+    if (insufficientSlots.length > 0) {
+      return {
+        isValid: false,
+        message: `Insufficient time slots for the following grade-sections:\n${insufficientSlots.join('\n')}\nPlease add more time slots to proceed.`
+      };
+    }
+
+    return { isValid: true, message: "" };
+  };
+
   const isStepValid = () => {
     const data = formData[currentStep === 1 ? 'projectName' : currentStep === 2 ? 'classes' : currentStep === 3 ? 'faculty' : currentStep === 4 ? 'grades' : currentStep === 5 ? 'subjects' : 'timeSlots'];
     if (currentStep === 1) return formData.projectName.trim() !== '';
@@ -539,40 +695,38 @@ const MultiStepForm = () => {
           row.gradeSections.length > 0 &&
           row.classesWeek.trim() !== ''
       );
-    if (currentStep === 6)
-      return formData.timeSlots.every(
-        (row) =>
-          row.days.length > 0 &&
-          row.startTime.trim() !== '' &&
-          row.endTime.trim() !== '' &&
-          row.applicableTo.length > 0
-      );
+    if (currentStep === 6) {
+      return isFieldsValid && isTimeSlotsValid;
+    }
     return true;
   };
 
   const renderStep = () => {
     if (showUpload) {
       return (
-        <div className="form-step">
+        <div className="step-content">
           <h2>Upload CSV</h2>
           <input
             type="file"
             ref={fileInputRef}
-            style={{ display: 'none' }}
+            className="input-hidden"
             accept=".csv"
             onChange={(e) => {
-              // handleFileUpload(e); // Commented out as implementation is missing
               console.log('CSV upload not implemented');
               e.target.value = '';
             }}
           />
-          <button className="select-btn" onClick={() => fileInputRef.current?.click()}>
-            Select Files
-          </button>
-          <button className="download-btn">Download Sample CSV</button>
-          <button className="next-btn" onClick={goToNextStep}>
-            Next
-          </button>
+          <div className="button-group">
+            <button className="action-button action-button-upload" onClick={() => fileInputRef.current?.click()}>
+              Select Files
+            </button>
+            <button className="action-button action-button-download">Download Sample CSV</button>
+          </div>
+          <div className="button-container-right">
+            <button className="action-button action-button-next" onClick={goToNextStep}>
+              Next
+            </button>
+          </div>
         </div>
       );
     }
@@ -580,47 +734,32 @@ const MultiStepForm = () => {
     switch (currentStep) {
       case 1:
         return (
-          <div className="form-step">
+          <div className="step-content">
             <h2>Project Name</h2>
             <input
               type="text"
               placeholder="Enter Project Name"
               value={formData.projectName}
               onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
+              className="form-input"
             />
-            <div style={{ marginTop: '15px', marginBottom: '15px' }}>
+            <div className="button-group">
               <button 
                 onClick={loadRandomData}
-                style={{ 
-                  backgroundColor: '#6a5acd', 
-                  color: 'white', 
-                  padding: '8px 16px', 
-                  border: 'none', 
-                  borderRadius: '4px', 
-                  cursor: 'pointer',
-                  marginRight: '10px'
-                }}
+                className="action-button action-button-random"
               >
                 Load Random Data
               </button>
               <button 
                 onClick={handleJSONUploadClick}
-                style={{ 
-                  backgroundColor: '#4CAF50', 
-                  color: 'white', 
-                  padding: '8px 16px', 
-                  border: 'none', 
-                  borderRadius: '4px', 
-                  cursor: 'pointer',
-                  marginRight: '10px'
-                }}
+                className="action-button action-button-json"
               >
                 Upload JSON File
               </button>
               <input
                 type="file"
                 ref={jsonFileInputRef}
-                style={{ display: 'none' }}
+                className="input-hidden"
                 accept=".json"
                 onChange={(e) => {
                   handleJSONUpload(e);
@@ -628,90 +767,101 @@ const MultiStepForm = () => {
                 }}
               />
             </div>
-            <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
-              Next
-            </button>
+            <div className="button-container-right">
+              <button className="action-button action-button-next" onClick={goToNextStep} disabled={!isStepValid()}>
+                Next
+              </button>
+            </div>
           </div>
         );
       case 2:
         return (
-          <div className="form-step">
+          <div className="step-content">
             <h2>Classes</h2>
-            <label>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={formData.multipleBuildings}
                 onChange={handleMultipleBuildingsChange}
-              /> Multiple Buildings
+                className="form-checkbox"
+              />
+              <span>Multiple Buildings</span>
             </label>
-            <table>
-              <thead>
-                <tr>
-                  <th>Room</th>
-                  <th>Room Capacity</th>
-                  {formData.multipleBuildings && <th>Building Name</th>}
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {formData.classes.map((row, index) => (
-                  <tr key={index}>
-                    <td>
-                      <input
-                        type="text"
-                        value={row.room}
-                        onChange={(e) => handleInputChange('classes', index, 'room', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={row.capacity}
-                        onChange={(e) =>
-                          handleInputChange('classes', index, 'capacity', e.target.value)
-                        }
-                      />
-                    </td>
-                    {formData.multipleBuildings && (
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Room</th>
+                    <th>Room Capacity</th>
+                    {formData.multipleBuildings && <th>Building Name</th>}
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formData.classes.map((row, index) => (
+                    <tr key={index}>
                       <td>
-                        <select
-                          value={row.building}
-                          onChange={(e) => handleBuildingChange(index, e.target.value)}
-                        >
-                          <option value="">Select Building</option>
-                          {formData.buildings.map((building, i) => (
-                            <option key={i} value={building}>
-                              {building}
-                            </option>
-                          ))}
-                          <option value="+Add New Building">+Add New Building</option>
-                        </select>
-                        {row.building === '+Add New Building' && (
-                          <div>
-                            <input
-                              type="text"
-                              value={newBuildingInput}
-                              onChange={(e) => setNewBuildingInput(e.target.value)}
-                              placeholder="Enter new building"
-                            />
-                            <button onClick={() => addNewBuilding(index)}>Add</button>
-                          </div>
+                        <input
+                          type="text"
+                          value={row.room}
+                          onChange={(e) => handleInputChange('classes', index, 'room', e.target.value)}
+                          className="form-input"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={row.capacity}
+                          onChange={(e) => handleInputChange('classes', index, 'capacity', e.target.value)}
+                          className="form-input"
+                        />
+                      </td>
+                      {formData.multipleBuildings && (
+                        <td>
+                          <select
+                            value={row.building}
+                            onChange={(e) => handleBuildingChange(index, e.target.value)}
+                            className="form-select"
+                            style={{ width: '250px' }}
+                          >
+                            <option value="">Select Building</option>
+                            {formData.buildings.map((building, i) => (
+                              <option key={i} value={building}>
+                                {building}
+                              </option>
+                            ))}
+                            <option value="+Add New Building">+Add New Building</option>
+                          </select>
+                          {row.building === '+Add New Building' && (
+                            <div className="new-building-input">
+                              <input
+                                type="text"
+                                value={newBuildingInput}
+                                onChange={(e) => setNewBuildingInput(e.target.value)}
+                                placeholder="Enter new building"
+                                className="form-input"
+                              />
+                              <button onClick={() => addNewBuilding(index)} className="action-button action-button-add">
+                                Add
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      )}
+                      <td>
+                        {formData.classes.length > 1 && (
+                          <button className="action-button action-button-delete" onClick={() => deleteRow('classes', index)}>
+                            X
+                          </button>
                         )}
                       </td>
-                    )}
-                    <td>
-                      {formData.classes.length > 1 && (
-                        <button className="delete-btn" onClick={() => deleteRow('classes', index)}>
-                          X
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <button
-              className="add-btn"
+              className="action-button action-button-add"
               onClick={() => addNewRow('classes')}
               disabled={
                 formData.classes.length === 0 ||
@@ -725,85 +875,94 @@ const MultiStepForm = () => {
             >
               Add New Room
             </button>
-            <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
-              Next
-            </button>
+            <div className="button-container-right">
+              <button className="action-button action-button-next" onClick={goToNextStep} disabled={!isStepValid()}>
+                Next
+              </button>
+            </div>
           </div>
         );
       case 3:
         return (
-          <div className="form-step">
+          <div className="step-content">
             <h2>Faculty</h2>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ marginRight: '20px' }}>
+            <div className="radio-group">
+              <label className="radio-label">
                 <input
                   type="radio"
                   name="facultyMode"
                   value="organization"
                   checked={facultyMode === 'organization'}
                   onChange={() => handleFacultyModeChange('organization')}
+                  className="form-radio"
                 />
-                Organization Mode
+                <span>Organization Mode</span>
               </label>
-              <label>
+              <label className="radio-label">
                 <input
                   type="radio"
                   name="facultyMode"
                   value="personal"
                   checked={facultyMode === 'personal'}
                   onChange={() => handleFacultyModeChange('personal')}
+                  className="form-radio"
                 />
-                Personal Mode
+                <span>Personal Mode</span>
               </label>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Faculty_Id</th>
-                  <th>Name</th>
-                  {facultyMode === 'organization' && <th>Mail Id</th>}
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {formData.faculty.map((row, index) => (
-                  <tr key={index}>
-                    <td>
-                      <input
-                        type="text"
-                        value={row.id}
-                        onChange={(e) => handleInputChange('faculty', index, 'id', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={row.name}
-                        onChange={(e) => handleInputChange('faculty', index, 'name', e.target.value)}
-                      />
-                    </td>
-                    {facultyMode === 'organization' && (
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Faculty_Id</th>
+                    <th>Name</th>
+                    {facultyMode === 'organization' && <th>Mail Id</th>}
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formData.faculty.map((row, index) => (
+                    <tr key={index}>
                       <td>
                         <input
                           type="text"
-                          value={row.mail}
-                          onChange={(e) => handleInputChange('faculty', index, 'mail', e.target.value)}
+                          value={row.id}
+                          onChange={(e) => handleInputChange('faculty', index, 'id', e.target.value)}
+                          className="form-input"
                         />
                       </td>
-                    )}
-                    <td>
-                      {formData.faculty.length > 1 && (
-                        <button className="delete-btn" onClick={() => deleteRow('faculty', index)}>
-                          X
-                        </button>
+                      <td>
+                        <input
+                          type="text"
+                          value={row.name}
+                          onChange={(e) => handleInputChange('faculty', index, 'name', e.target.value)}
+                          className="form-input"
+                        />
+                      </td>
+                      {facultyMode === 'organization' && (
+                        <td>
+                          <input
+                            type="text"
+                            value={row.mail}
+                            onChange={(e) => handleInputChange('faculty', index, 'mail', e.target.value)}
+                            className="form-input"
+                          />
+                        </td>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <td>
+                        {formData.faculty.length > 1 && (
+                          <button className="action-button action-button-delete" onClick={() => deleteRow('faculty', index)}>
+                            X
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <button
-              className="add-btn"
+              className="action-button action-button-add"
               onClick={() => addNewRow('faculty')}
               disabled={
                 formData.faculty.length === 0 ||
@@ -817,93 +976,98 @@ const MultiStepForm = () => {
             >
               Add New Faculty
             </button>
-            <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
-              Next
-            </button>
+            <div className="button-container-right">
+              <button className="action-button action-button-next" onClick={goToNextStep} disabled={!isStepValid()}>
+                Next
+              </button>
+            </div>
           </div>
         );
       case 4:
         return (
-          <div className="form-step">
+          <div className="step-content">
             <h2>Grades</h2>
-            <label style={{ marginBottom: '10px', display: 'block' }}>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={applyToAllGrades}
                 onChange={handleApplyToAllGradesChange}
+                className="form-checkbox"
               />
-              Apply class assignment type to all grades
+              <span>Apply class assignment type to all grades</span>
             </label>
-            <table>
-              <thead>
-                <tr>
-                  <th>Grade</th>
-                  <th>Section</th>
-                  <th>Strength</th>
-                  <th>Class Assignment Type</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {formData.grades.map((row, index) => (
-                  <tr key={index}>
-                    <td>
-                      <input
-                        type="text"
-                        value={row.grade}
-                        onChange={(e) => handleInputChange('grades', index, 'grade', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={row.section}
-                        onChange={(e) =>
-                          handleInputChange('grades', index, 'section', e.target.value)
-                        }
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="text"
-                        value={row.strength}
-                        onChange={(e) =>
-                          handleInputChange('grades', index, 'strength', e.target.value)
-                        }
-                      />
-                    </td>
-                    <td>
-                      <select
-                        value={row.classAssignmentType}
-                        onChange={(e) => {
-                          handleInputChange('grades', index, 'classAssignmentType', e.target.value);
-                          if (applyToAllGrades) {
-                            const updatedGrades = formData.grades.map(grade => ({
-                              ...grade,
-                              classAssignmentType: e.target.value
-                            }));
-                            setFormData({ ...formData, grades: updatedGrades });
-                          }
-                        }}
-                        disabled={applyToAllGrades && index !== 0}
-                      >
-                        <option value="same">Same Class</option>
-                        <option value="any">Any Class</option>
-                      </select>
-                    </td>
-                    <td>
-                      {formData.grades.length > 1 && (
-                        <button className="delete-btn" onClick={() => deleteRow('grades', index)}>
-                          X
-                        </button>
-                      )}
-                    </td>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Grade</th>
+                    <th>Section</th>
+                    <th>Strength</th>
+                    <th>Class Assignment Type</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {formData.grades.map((row, index) => (
+                    <tr key={index}>
+                      <td>
+                        <input
+                          type="text"
+                          value={row.grade}
+                          onChange={(e) => handleInputChange('grades', index, 'grade', e.target.value)}
+                          className="form-input"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={row.section}
+                          onChange={(e) => handleInputChange('grades', index, 'section', e.target.value)}
+                          className="form-input"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={row.strength}
+                          onChange={(e) => handleInputChange('grades', index, 'strength', e.target.value)}
+                          className="form-input"
+                        />
+                      </td>
+                      <td>
+                        <select
+                          value={row.classAssignmentType}
+                          onChange={(e) => {
+                            handleInputChange('grades', index, 'classAssignmentType', e.target.value);
+                            if (applyToAllGrades) {
+                              const updatedGrades = formData.grades.map(grade => ({
+                                ...grade,
+                                classAssignmentType: e.target.value
+                              }));
+                              setFormData({ ...formData, grades: updatedGrades });
+                            }
+                          }}
+                          disabled={applyToAllGrades && index !== 0}
+                          className="form-select"
+                        >
+                          <option value="same">Same Class</option>
+                          <option value="any">Any Class</option>
+                        </select>
+                      </td>
+                      <td>
+                        {formData.grades.length > 1 && (
+                          <button className="action-button action-button-delete" onClick={() => deleteRow('grades', index)}>
+                            X
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <button
-              className="add-btn"
+              className="action-button action-button-add"
               onClick={() => addNewRow('grades')}
               disabled={
                 formData.grades.length === 0 ||
@@ -916,218 +1080,263 @@ const MultiStepForm = () => {
             >
               Add New Grade
             </button>
-            <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
-              Next
-            </button>
+            <div className="button-container-right">
+              <button className="action-button action-button-next" onClick={goToNextStep} disabled={!isStepValid()}>
+                Next
+              </button>
+            </div>
           </div>
         );
       case 5:
         return (
-          <div className="form-step">
+          <div className="step-content">
             <h2>Subjects</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Subject Code</th>
-                  <th>Subject</th>
-                  <th>Faculty</th>
-                  <th>Grade - Section</th>
-                  <th>Combined?</th>
-                  <th>Assigned Classes</th>
-                  <th>Classes/Week</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {formData.subjects.map((row, index) => {
-                  const handleAssignedClassesChange = (e) => {
-                    const selectedClasses = Array.from(e.target.selectedOptions, option => option.value);
-                    setFormData(prevData => ({
-                      ...prevData,
-                      subjects: prevData.subjects.map((subject, i) => 
-                        i === index 
-                          ? { ...subject, assignedClasses: selectedClasses }
-                          : subject
-                      )
-                    }));
-                  };
+            <div className="table-wrapper" style={{ position: 'relative', overflowX: 'auto', overflowY: 'visible' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Subject Code</th>
+                    <th>Subject</th>
+                    <th>Faculty</th>
+                    <th>Grade - Section</th>
+                    <th>Combined?</th>
+                    <th>Assigned Classes</th>
+                    <th>Classes/Week</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formData.subjects.map((row, index) => {
+                    const handleFacultyChange = (selectedOptions) => {
+                      const selectedFacultyIds = selectedOptions ? selectedOptions.map(option => option.value) : [];
+                      setFormData(prevData => {
+                        const updatedSubjects = [...prevData.subjects];
+                        updatedSubjects[index] = { ...updatedSubjects[index], facultyIds: selectedFacultyIds };
+                        console.log(`Row ${index} - Updated facultyIds:`, selectedFacultyIds);
+                        return { ...prevData, subjects: updatedSubjects };
+                      });
+                    };
 
-                  const handleSelectAll = () => {
-                    const gradeSections = row.gradeSections.map(gs => `${gs.grade} - ${gs.section}`);
-                    const assignedTypeGrades = formData.grades.filter(grade => 
-                      gradeSections.includes(`${grade.grade} - ${grade.section}`) && 
-                      grade.classAssignmentType === 'assigned'
+                    const handleGradeSectionChangeLocal = (selectedOptions) => {
+                      const selectedValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
+                      setFormData(prevData => {
+                        const updatedSubjects = [...prevData.subjects];
+                        updatedSubjects[index] = {
+                          ...updatedSubjects[index],
+                          gradeSections: selectedValues.map(value => {
+                            const [grade, section] = value.split(' - ');
+                            return { grade, section };
+                          })
+                        };
+                        console.log(`Row ${index} - Updated gradeSections:`, updatedSubjects[index].gradeSections);
+                        return { ...prevData, subjects: updatedSubjects };
+                      });
+                    };
+
+                    const handleAssignedClassesChange = (selectedOptions) => {
+                      const selectedClasses = selectedOptions ? selectedOptions.map(option => option.value) : [];
+                      setFormData(prevData => {
+                        const updatedSubjects = [...prevData.subjects];
+                        updatedSubjects[index] = { ...updatedSubjects[index], assignedClasses: selectedClasses };
+                        console.log(`Row ${index} - Updated assignedClasses:`, selectedClasses);
+                        return { ...prevData, subjects: updatedSubjects };
+                      });
+                    };
+
+                    const handleSelectAll = () => {
+                      const gradeSections = row.gradeSections.map(gs => `${gs.grade} - ${gs.section}`);
+                      const assignedTypeGrades = formData.grades.filter(grade => 
+                        gradeSections.includes(`${grade.grade} - ${grade.section}`) && 
+                        grade.classAssignmentType === 'assigned'
+                      );
+                      if (assignedTypeGrades.length > 0) {
+                        alert('Cannot use Select All when grades are set to Assigned type');
+                        return;
+                      }
+                      const allClasses = formData.classes.map(cls => cls.room);
+                      setFormData(prevData => {
+                        const updatedSubjects = [...prevData.subjects];
+                        updatedSubjects[index] = { ...updatedSubjects[index], assignedClasses: allClasses };
+                        console.log(`Row ${index} - Select All - Updated assignedClasses:`, allClasses);
+                        return { ...prevData, subjects: updatedSubjects };
+                      });
+                    };
+
+                    const handleClearClasses = () => {
+                      setFormData(prevData => {
+                        const updatedSubjects = [...prevData.subjects];
+                        updatedSubjects[index] = { ...updatedSubjects[index], assignedClasses: [] };
+                        console.log(`Row ${index} - Clear - Updated assignedClasses:`, []);
+                        return { ...prevData, subjects: updatedSubjects };
+                      });
+                    };
+
+                    const isAssignedType = row.gradeSections.some(gs => 
+                      formData.grades.find(g => 
+                        g.grade === gs.grade && 
+                        g.section === gs.section && 
+                        g.classAssignmentType === 'assigned'
+                      )
                     );
-                    if (assignedTypeGrades.length > 0) {
-                      alert('Cannot use Select All when grades are set to Assigned type');
-                      return;
-                    }
-                    const allClasses = formData.classes.map(cls => cls.room);
-                    setFormData(prevData => ({
-                      ...prevData,
-                      subjects: prevData.subjects.map((subject, i) => 
-                        i === index 
-                          ? { ...subject, assignedClasses: allClasses }
-                          : subject
-                      )
+
+                    const subjectCodeOptions = [...new Set(formData.subjects.map((s) => s.code).filter(Boolean))];
+                    const subjectOptions = [...new Set(formData.subjects.map((s) => s.subject).filter(Boolean))];
+                    console.log(`Row ${index} - Subject Code Options:`, ['Test', ...subjectCodeOptions, '+Add New Subject Code']);
+                    console.log(`Row ${index} - Subject Options:`, ['Hi', ...subjectOptions, '+Add New Subject']);
+
+                    const facultyOptions = formData.faculty.map(faculty => ({
+                      value: faculty.id,
+                      label: `${faculty.id} - ${faculty.name}`
                     }));
-                  };
 
-                  const handleClearClasses = () => {
-                    setFormData(prevData => ({
-                      ...prevData,
-                      subjects: prevData.subjects.map((subject, i) => 
-                        i === index 
-                          ? { ...subject, assignedClasses: [] }
-                          : subject
-                      )
+                    const gradeSectionOptions = formData.grades.map(grade => ({
+                      value: `${grade.grade} - ${grade.section}`,
+                      label: `${grade.grade} - ${grade.section}`
                     }));
-                  };
 
-                  const isAssignedType = row.gradeSections.some(gs => 
-                    formData.grades.find(g => 
-                      g.grade === gs.grade && 
-                      g.section === gs.section && 
-                      g.classAssignmentType === 'assigned'
-                    )
-                  );
+                    const classOptions = formData.classes.map(cls => ({
+                      value: cls.room,
+                      label: cls.room
+                    }));
 
-                  return (
-                    <tr key={index}>
-                      <td>
-                        <select
-                          value={row.code}
-                          onChange={(e) => handleSubjectCodeChange(index, e.target.value)}
-                        >
-                          <option value="">Select Subject Code</option>
-                          <option value="Test">Test</option>
-                          {[...new Set(formData.subjects.map((s) => s.code).filter(Boolean))].map(
-                            (code, i) => (
-                              <option key={i} value={code}>
-                                {code}
-                              </option>
-                            )
-                          )}
-                          <option value="+Add New Subject Code">+Add New Subject Code</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          value={row.subject}
-                          onChange={(e) => handleSubjectChange(index, e.target.value)}
-                        >
-                          <option value="">Select Subject</option>
-                          <option value="hi">Hi</option>
-                          {[...new Set(formData.subjects.map((s) => s.subject).filter(Boolean))].map(
-                            (subject, i) => (
-                              <option key={i} value={subject}>
-                                {subject}
-                              </option>
-                            )
-                          )}
-                          <option value="+Add New Subject">+Add New Subject</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          multiple
-                          value={row.facultyIds}
-                          onChange={(e) =>
-                            handleInputChange(
-                              'subjects',
-                              index,
-                              'facultyIds',
-                              Array.from(e.target.selectedOptions, (option) => option.value)
-                            )
-                          }
-                          style={{ width: '150px', height: '100px', padding: '5px', borderRadius: '4px' }}
-                        >
-                          {formData.faculty.map((faculty, i) => (
-                            <option key={i} value={faculty.id}>
-                              {faculty.id} - {faculty.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          multiple
-                          value={row.gradeSections.map((gs) => `${gs.grade} - ${gs.section}`)}
-                          onChange={(e) => handleGradeSectionChange(index, e.target.selectedOptions)}
-                          style={{ width: '150px', height: '100px', padding: '5px', borderRadius: '4px' }}
-                        >
-                          {formData.grades.map((grade, i) => (
-                            <option key={i} value={`${grade.grade} - ${grade.section}`}>
-                              {grade.grade} - ${grade.section}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={row.isCombined}
-                          onChange={(e) =>
-                            handleInputChange('subjects', index, 'isCombined', e.target.checked)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                          <div style={{ display: 'flex', gap: '5px' }}>
-                            <button 
-                              onClick={handleSelectAll}
-                              disabled={isAssignedType}
-                              style={{ padding: '2px 5px', fontSize: '12px' }}
-                            >
-                              Select All
-                            </button>
-                            <button 
-                              onClick={handleClearClasses}
-                              disabled={isAssignedType}
-                              style={{ padding: '2px 5px', fontSize: '12px' }}
-                            >
-                              Clear
-                            </button>
-                          </div>
+                    const selectedFaculty = row.facultyIds.map(id => 
+                      facultyOptions.find(option => option.value === id)
+                    ).filter(Boolean);
+
+                    const selectedGradeSections = row.gradeSections.map(gs => ({
+                      value: `${gs.grade} - ${gs.section}`,
+                      label: `${gs.grade} - ${gs.section}`
+                    }));
+
+                    const selectedClasses = row.assignedClasses.map(room => ({
+                      value: room,
+                      label: room
+                    }));
+
+                    return (
+                      <tr key={index}>
+                        <td>
                           <select
-                            multiple
-                            value={row.assignedClasses}
-                            onChange={handleAssignedClassesChange}
-                            disabled={isAssignedType}
-                            style={{ width: '150px', height: '100px', padding: '5px', borderRadius: '4px' }}
+                            value={row.code}
+                            onChange={(e) => handleSubjectCodeChange(index, e.target.value)}
+                            className="form-select"
+                            style={{ width: '250px' }}
                           >
-                            {formData.classes.map((cls, i) => (
-                              <option key={i} value={cls.room}>
-                                {cls.room}
-                              </option>
-                            ))}
+                            <option value="">Select Subject Code</option>
+                            <option value="Test">Test</option>
+                            {[...new Set(formData.subjects.map((s) => s.code).filter(Boolean))].map(
+                              (code, i) => (
+                                <option key={i} value={code}>
+                                  {code}
+                                </option>
+                              )
+                            )}
+                            <option value="+Add New Subject Code">+Add New Subject Code</option>
                           </select>
-                        </div>
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={row.classesWeek}
-                          onChange={(e) =>
-                            handleInputChange('subjects', index, 'classesWeek', e.target.value)
-                          }
-                        />
-                      </td>
-                      <td>
-                        {formData.subjects.length > 1 && (
-                          <button className="delete-btn" onClick={() => deleteRow('subjects', index)}>
-                            X
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td>
+                          <select
+                            value={row.subject}
+                            onChange={(e) => handleSubjectChange(index, e.target.value)}
+                            className="form-select"
+                            style={{ width: '250px' }}
+                          >
+                            <option value="">Select Subject</option>
+                            <option value="Hi">Hi</option>
+                            {[...new Set(formData.subjects.map((s) => s.subject).filter(Boolean))].map(
+                              (subject, i) => (
+                                <option key={i} value={subject}>
+                                  {subject}
+                                </option>
+                              )
+                            )}
+                            <option value="+Add New Subject">+Add New Subject</option>
+                          </select>
+                        </td>
+                        <td>
+                          <Select
+                            isMulti
+                            options={facultyOptions}
+                            value={selectedFaculty}
+                            onChange={handleFacultyChange}
+                            styles={customStylesExtraWideWithWrap}
+                            placeholder="Select Faculty..."
+                          />
+                        </td>
+                        <td>
+                          <Select
+                            isMulti
+                            options={gradeSectionOptions}
+                            value={selectedGradeSections}
+                            onChange={handleGradeSectionChangeLocal}
+                            styles={customStylesWideWithWrap}
+                            placeholder="Select Grades..."
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={row.isCombined}
+                            onChange={(e) =>
+                              handleInputChange('subjects', index, 'isCombined', e.target.checked)
+                            }
+                            className="form-checkbox"
+                          />
+                        </td>
+                        <td>
+                          <div className="select-actions">
+                            <div className="button-group">
+                              <button 
+                                onClick={handleSelectAll}
+                                disabled={isAssignedType}
+                                className="action-button action-button-small"
+                              >
+                                Select All
+                              </button>
+                              <button 
+                                onClick={handleClearClasses}
+                                disabled={isAssignedType}
+                                className="action-button action-button-small"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <Select
+                              isMulti
+                              options={classOptions}
+                              value={selectedClasses}
+                              onChange={handleAssignedClassesChange}
+                              isDisabled={isAssignedType}
+                              styles={customStylesWideWithWrap}
+                              placeholder="Select Classes..."
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={row.classesWeek}
+                            onChange={(e) =>
+                              handleInputChange('subjects', index, 'classesWeek', e.target.value)
+                            }
+                            className="form-input"
+                          />
+                        </td>
+                        <td>
+                          {formData.subjects.length > 1 && (
+                            <button className="action-button action-button-delete" onClick={() => deleteRow('subjects', index)}>
+                              X
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             <button
-              className="add-btn"
+              className="action-button action-button-add"
               onClick={() => addNewRow('subjects')}
               disabled={
                 formData.subjects.length === 0 ||
@@ -1142,129 +1351,151 @@ const MultiStepForm = () => {
             >
               Add New Subject
             </button>
-            <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
-              Next
-            </button>
-            <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-              Hold Ctrl (Windows) or Cmd (Mac) to select multiple options.
-            </p>
+            <div className="button-container-right">
+              <button className="action-button action-button-next" onClick={goToNextStep} disabled={!isStepValid()}>
+                Next
+              </button>
+            </div>
           </div>
         );
       case 6:
         return (
-          <div className="form-step">
+          <div className="step-content">
             <h2>Time Slots</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Days</th>
-                  <th>Start Time</th>
-                  <th>End Time</th>
-                  <th>Applicable To (Grade - Section)</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {formData.timeSlots.map((row, index) => {
-                  const isTimeOverlapping = (start, end, checkIndex) => {
-                    return formData.timeSlots.some((slot, i) => {
-                      if (i === checkIndex) return false;
-                      if (!slot.days.some(day => row.days.includes(day))) return false;
-                      const slotStart = slot.startTime;
-                      const slotEnd = slot.endTime;
-                      return (
-                        (start >= slotStart && start < slotEnd) ||
-                        (end > slotStart && end <= slotEnd) ||
-                        (start <= slotStart && end >= slotEnd)
-                      );
-                    });
-                  };
+            {warningMessage && (
+              <div className="warning-message" style={{ color: 'red', whiteSpace: 'pre-line', marginBottom: '10px' }}>
+                {warningMessage}
+              </div>
+            )}
+            <div className="table-wrapper" style={{ position: 'relative', overflowX: 'auto', overflowY: 'visible' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Days</th>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Applicable To (Grade - Section)</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {formData.timeSlots.map((row, index) => {
+                    const isTimeOverlapping = (start, end, checkIndex) => {
+                      return formData.timeSlots.some((slot, i) => {
+                        if (i === checkIndex) return false;
+                        if (!slot.days.some(day => row.days.includes(day))) return false;
+                        const slotStart = slot.startTime;
+                        const slotEnd = slot.endTime;
+                        return (
+                          (start >= slotStart && start < slotEnd) ||
+                          (end > slotStart && end <= slotEnd) ||
+                          (start <= slotStart && end >= slotEnd)
+                        );
+                      });
+                    };
 
-                  const overlappingSlots = formData.timeSlots.filter(
-                    (slot, i) =>
-                      i !== index &&
-                      slot.days.some(day => row.days.includes(day)) &&
-                      isTimeOverlapping(row.startTime, row.endTime, index)
-                  );
-                  const usedGradeSections = new Set(
-                    overlappingSlots.flatMap(slot => slot.applicableTo)
-                  );
+                    const overlappingSlots = formData.timeSlots.filter(
+                      (slot, i) =>
+                        i !== index &&
+                        slot.days.some(day => row.days.includes(day)) &&
+                        isTimeOverlapping(row.startTime, row.endTime, index)
+                    );
+                    const usedGradeSections = new Set(
+                      overlappingSlots.flatMap(slot => slot.applicableTo)
+                    );
 
-                  const availableGradeSections = formData.grades.filter(
-                    grade => !usedGradeSections.has(`${grade.grade} - ${grade.section}`)
-                  );
+                    const availableGradeSections = formData.grades.filter(
+                      grade => !usedGradeSections.has(`${grade.grade} - ${grade.section}`)
+                    );
 
-                  return (
-                    <tr key={index}>
-                      <td>
-                        <select
-                          multiple
-                          value={row.days}
-                          onChange={(e) => {
-                            const selectedDays = Array.from(e.target.selectedOptions, option => option.value);
-                            handleInputChange('timeSlots', index, 'days', selectedDays);
-                          }}
-                          style={{ width: '150px', height: '100px', padding: '5px', borderRadius: '4px' }}
-                        >
-                          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(
-                            (day) => (
-                              <option key={day} value={day}>
-                                {day}
-                              </option>
-                            )
+                    const handleDaysChange = (selectedOptions) => {
+                      const selectedDays = selectedOptions ? selectedOptions.map(option => option.value) : [];
+                      handleInputChange('timeSlots', index, 'days', selectedDays);
+                    };
+
+                    const handleApplicableToChange = (selectedOptions) => {
+                      const selectedOptionsValues = selectedOptions ? selectedOptions.map(option => option.value) : [];
+                      handleInputChange('timeSlots', index, 'applicableTo', selectedOptionsValues);
+                    };
+
+                    const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => ({
+                      value: day,
+                      label: day
+                    }));
+
+                    const applicableToOptions = availableGradeSections.map(grade => ({
+                      value: `${grade.grade} - ${grade.section}`,
+                      label: `${grade.grade} - ${grade.section}`
+                    }));
+
+                    const selectedDays = row.days.map(day => ({
+                      value: day,
+                      label: day
+                    }));
+
+                    const selectedApplicableTo = row.applicableTo.map(value => ({
+                      value: value,
+                      label: value
+                    }));
+
+                    return (
+                      <tr key={index}>
+                        <td>
+                          <Select
+                            isMulti
+                            options={dayOptions}
+                            value={selectedDays}
+                            onChange={handleDaysChange}
+                            styles={customStylesWideWithWrap}
+                            placeholder="Select Days..."
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="time"
+                            value={row.startTime}
+                            onChange={(e) =>
+                              handleInputChange('timeSlots', index, 'startTime', e.target.value)
+                            }
+                            className="form-input"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="time"
+                            value={row.endTime}
+                            onChange={(e) =>
+                              handleInputChange('timeSlots', index, 'endTime', e.target.value)
+                            }
+                            className="form-input"
+                          />
+                        </td>
+                        <td>
+                          <Select
+                            isMulti
+                            options={applicableToOptions}
+                            value={selectedApplicableTo}
+                            onChange={handleApplicableToChange}
+                            styles={customStylesWideWithWrap}
+                            placeholder="Select Grades..."
+                            isDisabled={row.days.length === 0 || !row.startTime || !row.endTime}
+                          />
+                        </td>
+                        <td>
+                          {formData.timeSlots.length > 1 && (
+                            <button className="action-button action-button-delete" onClick={() => deleteRow('timeSlots', index)}>
+                              X
+                            </button>
                           )}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="time"
-                          value={row.startTime}
-                          onChange={(e) =>
-                            handleInputChange('timeSlots', index, 'startTime', e.target.value)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="time"
-                          value={row.endTime}
-                          onChange={(e) =>
-                            handleInputChange('timeSlots', index, 'endTime', e.target.value)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <select
-                          multiple
-                          value={row.applicableTo}
-                          onChange={(e) => {
-                            const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-                            handleInputChange('timeSlots', index, 'applicableTo', selectedOptions);
-                          }}
-                          style={{ width: '150px', height: '100px', padding: '5px', borderRadius: '4px' }}
-                          disabled={row.days.length === 0 || !row.startTime || !row.endTime}
-                        >
-                          {availableGradeSections.map((grade, i) => (
-                            <option key={i} value={`${grade.grade} - ${grade.section}`}>
-                              {grade.grade} - ${grade.section}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        {formData.timeSlots.length > 1 && (
-                          <button className="delete-btn" onClick={() => deleteRow('timeSlots', index)}>
-                            X
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             <button
-              className="add-btn"
+              className="action-button action-button-add"
               onClick={() => addNewRow('timeSlots')}
               disabled={
                 formData.timeSlots.length === 0 ||
@@ -1278,143 +1509,156 @@ const MultiStepForm = () => {
             >
               Add New Time Slot
             </button>
-            <button className="next-btn" onClick={goToNextStep} disabled={!isStepValid()}>
-              Next
-            </button>
-            <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-              Hold Ctrl (Windows) or Cmd (Mac) to select multiple options.
-            </p>
+            <div className="button-container-right">
+              <button className="action-button action-button-next" onClick={goToNextStep} disabled={!isStepValid()}>
+                Next
+              </button>
+            </div>
           </div>
         );
       case 7:
         return (
-          <div className="form-step">
+          <div className="step-content">
             <h2>Summary</h2>
-            <div style={{ marginBottom: '20px' }}>
+            {warningMessage && (
+              <div className="warning-message" style={{ color: 'red', whiteSpace: 'pre-line', marginBottom: '10px' }}>
+                {warningMessage}
+              </div>
+            )}
+            <div className="summary-section">
               <h3>Project Name</h3>
               <p>{formData.projectName}</p>
             </div>
-            <div style={{ marginBottom: '20px' }}>
+            <div className="summary-section">
               <h3>Classes</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Room</th>
-                    <th>Room Capacity</th>
-                    {formData.multipleBuildings && <th>Building Name</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.classes.map((row, index) => (
-                    <tr key={index}>
-                      <td>{row.room}</td>
-                      <td>{row.capacity}</td>
-                      {formData.multipleBuildings && <td>{row.building}</td>}
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Room</th>
+                      <th>Room Capacity</th>
+                      {formData.multipleBuildings && <th>Building Name</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {formData.classes.map((row, index) => (
+                      <tr key={index}>
+                        <td>{row.room}</td>
+                        <td>{row.capacity}</td>
+                        {formData.multipleBuildings && <td>{row.building}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div style={{ marginBottom: '20px' }}>
+            <div className="summary-section">
               <h3>Faculty</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Faculty_Id</th>
-                    <th>Name</th>
-                    {facultyMode === 'organization' && <th>Mail Id</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.faculty.map((row, index) => (
-                    <tr key={index}>
-                      <td>{row.id}</td>
-                      <td>{row.name}</td>
-                      {facultyMode === 'organization' && <td>{row.mail || 'N/A'}</td>}
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Faculty_Id</th>
+                      <th>Name</th>
+                      {facultyMode === 'organization' && <th>Mail Id</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {formData.faculty.map((row, index) => (
+                      <tr key={index}>
+                        <td>{row.id}</td>
+                        <td>{row.name}</td>
+                        {facultyMode === 'organization' && <td>{row.mail || 'N/A'}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div style={{ marginBottom: '20px' }}>
+            <div className="summary-section">
               <h3>Grades</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Grade</th>
-                    <th>Section</th>
-                    <th>Strength</th>
-                    <th>Class Assignment Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.grades.map((row, index) => (
-                    <tr key={index}>
-                      <td>{row.grade}</td>
-                      <td>{row.section}</td>
-                      <td>{row.strength}</td>
-                      <td>{row.classAssignmentType === 'same' ? 'Same Class' : 'Any Class'}</td>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Grade</th>
+                      <th>Section</th>
+                      <th>Strength</th>
+                      <th>Class Assignment Type</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {formData.grades.map((row, index) => (
+                      <tr key={index}>
+                        <td>{row.grade}</td>
+                        <td>{row.section}</td>
+                        <td>{row.strength}</td>
+                        <td>{row.classAssignmentType === 'same' ? 'Same Class' : 'Any Class'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div style={{ marginBottom: '20px' }}>
+            <div className="summary-section">
               <h3>Subjects</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Subject Code</th>
-                    <th>Subject</th>
-                    <th>Faculty</th>
-                    <th>Grade - Section</th>
-                    <th>Combined?</th>
-                    <th>Assigned Classes</th>
-                    <th>Classes/Week</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.subjects.map((row, index) => (
-                    <tr key={index}>
-                      <td>{row.code}</td>
-                      <td>{row.subject}</td>
-                      <td>{row.facultyIds.join(', ')}</td>
-                      <td>{row.gradeSections.map((gs) => `${gs.grade} - ${gs.section}`).join(', ')}</td>
-                      <td>{row.isCombined ? 'Yes' : 'No'}</td>
-                      <td>{row.assignedClasses.length > 0 ? row.assignedClasses.join(', ') : 'None'}</td>
-                      <td>{row.classesWeek}</td>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Subject Code</th>
+                      <th>Subject</th>
+                      <th>Faculty</th>
+                      <th>Grade - Section</th>
+                      <th>Combined?</th>
+                      <th>Assigned Classes</th>
+                      <th>Classes/Week</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {formData.subjects.map((row, index) => (
+                      <tr key={index}>
+                        <td>{row.code}</td>
+                        <td>{row.subject}</td>
+                        <td>{row.facultyIds.join(', ')}</td>
+                        <td>{row.gradeSections.map((gs) => `${gs.grade} - ${gs.section}`).join(', ')}</td>
+                        <td>{row.isCombined ? 'Yes' : 'No'}</td>
+                        <td>{row.assignedClasses.length > 0 ? row.assignedClasses.join(', ') : 'None'}</td>
+                        <td>{row.classesWeek}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div style={{ marginBottom: '20px' }}>
+            <div className="summary-section">
               <h3>Time Slots</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Days</th>
-                    <th>Start Time</th>
-                    <th>End Time</th>
-                    <th>Applicable To (Grade - Section)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.timeSlots.map((row, index) => (
-                    <tr key={index}>
-                      <td>{row.days.join(', ')}</td>
-                      <td>{row.startTime}</td>
-                      <td>{row.endTime}</td>
-                      <td>{row.applicableTo.join(', ')}</td>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Days</th>
+                      <th>Start Time</th>
+                      <th>End Time</th>
+                      <th>Applicable To (Grade - Section)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {formData.timeSlots.map((row, index) => (
+                      <tr key={index}>
+                        <td>{row.days.join(', ')}</td>
+                        <td>{row.startTime}</td>
+                        <td>{row.endTime}</td>
+                        <td>{row.applicableTo.join(', ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            
-            <div style={{ marginBottom: '20px', background: '#f5f5f5', padding: '15px', borderRadius: '5px' }}>
+            <div className="summary-section user-info-section">
               <h3>User Information</h3>
-              <table>
+              <table className="user-info-table">
                 <tbody>
                   <tr>
                     <td><strong>User ID:</strong></td>
@@ -1434,29 +1678,18 @@ const MultiStepForm = () => {
                   )}
                 </tbody>
               </table>
-              <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+              <p className="info-text">
                 This timetable will be associated with your account.
               </p>
             </div>
-            
-            <div className="button-group" style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button className="previous-btn" onClick={goToPreviousStep}>
+            <div className="button-group">
+              <button className="action-button action-button-back" onClick={goToPreviousStep}>
                 Back
               </button>
               <button 
-                className="generate-btn" 
+                className="action-button action-button-generate"
                 onClick={generateTimetable}
                 disabled={isGenerating}
-                style={{ 
-                  backgroundColor: '#4CAF50',
-                  color: 'white',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  fontWeight: 'bold'
-                }}
               >
                 {isGenerating ? 'Generating...' : 'Generate Timetable Directly'}
               </button>
@@ -1473,15 +1706,7 @@ const MultiStepForm = () => {
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
                 }}
-                style={{ 
-                  backgroundColor: '#2196F3',
-                  color: 'white',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px'
-                }}
+                className="action-button action-button-export"
               >
                 Export Data as JSON
               </button>
@@ -1494,25 +1719,25 @@ const MultiStepForm = () => {
   };
 
   return (
-    <div>
+    <div className="page-wrapper">
       <TopBar />
-      <div className="container" style={{ marginTop: '60px' }}>
-        <div className="progress-bar">
+      <div className="form-container">
+        <div className="progress-tracker">
           <span className="back-arrow" onClick={goToPreviousStep}>
             ←
           </span>
-          <div className="steps">
+          <div className="steps-container">
             {[1, 2, 3, 4, 5, 6, 7].map((step) => (
               <span
                 key={step}
-                className={`step ${currentStep >= step ? 'active' : ''}`}
+                className={`step-indicator ${currentStep >= step ? 'active' : ''}`}
               >
                 {step}
               </span>
             ))}
           </div>
         </div>
-        <div className="form-container">{renderStep()}</div>
+        <div className="form-content">{renderStep()}</div>
       </div>
     </div>
   );
