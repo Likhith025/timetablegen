@@ -24,7 +24,7 @@ const ChatbotInterface = ({ projectId: propProjectId }) => {
 
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { text: "Hi! I'm Jaffa a timetable assistant. How can I help you today?", sender: "bot" }
+    { text: "Hi! I'm Chintu a timetable assistant. How can I help you today?", sender: "bot" }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
@@ -246,7 +246,7 @@ const ChatbotInterface = ({ projectId: propProjectId }) => {
         <div className="toggle-icon">
           {isOpen ? '✕' : '💬'}
         </div>
-        {!isOpen && <span className="toggle-label">Jaffa</span>}
+        {!isOpen && <span className="toggle-label">Chintu</span>}
       </button>
 
       <div className={`chat-panel ${isOpen ? 'open' : ''}`}>

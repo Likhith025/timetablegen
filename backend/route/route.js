@@ -1,16 +1,6 @@
 // routes/AllRouter.js
 import express from "express";
 import {
-    createBlockRoom,
-    getBlockRooms,
-    getBlockRoomById,
-    updateBlockRoom,
-    deleteBlockRoom,
-    getBlockRoomsByUser,
-    getAvailableClassrooms,
-    getAvailableTimeSlots,
-} from "../controllers/blockRoomController.js";
-import {
     generateTimetableDirectly,
     saveGenerationResults,
     getTimetablesWithResults,
@@ -20,6 +10,7 @@ import {
     processRequest,
     applyChanges,
     processChatbotMessage,
+    updateTimetableu
 } from "../controllers/timeTableController.js";
 import { updateTimetable } from "../controllers/timetableUpdateController.js";
 import { processTimetableQuery } from "../controllers/chatBotController.js";
@@ -40,12 +31,6 @@ import {
     updateTimetableUser,
     removeTimetableUser
 } from "../controllers/userController.js";
-import {
-    submitChangeRequest,
-    approveChangeRequest,
-    rejectChangeRequest,
-} from "../controllers/changeRequestController.js";
-
 const AllRouter = express.Router();
 
 // User routes
@@ -88,24 +73,12 @@ AllRouter.get("/:timetableId/generation", getLatestGenerationResult);
 AllRouter.post("/generate-direct", generateTimetableDirectly);
 AllRouter.get("/user/:userId", getTimetablesByUser);
 AllRouter.get("/timetables/:id", getTimetableById);
+AllRouter.patch("/timetables/:id", updateTimetableu);
 AllRouter.patch("/update/timetables/:id", updateTimetable); // Updated route
 AllRouter.post("/processRequest", processRequest);
 AllRouter.post("/applyChanges", applyChanges);
 AllRouter.post("/processChatbotMessage", processChatbotMessage);
 
-// Block room routes
-AllRouter.post("/br/add", createBlockRoom);
-AllRouter.get("/br/:timetableId", getBlockRooms);
-AllRouter.get("/br/:id", getBlockRoomById);
-AllRouter.put("/br/:id", updateBlockRoom);
-AllRouter.delete("/br/:id", deleteBlockRoom);
-AllRouter.get("/br/user/:userId", getBlockRoomsByUser);
-AllRouter.get("/br/available-slots/:timetableId", getAvailableClassrooms);
-AllRouter.get("/br/available-time-slots/:timetableId", getAvailableTimeSlots);
 
-// Change request routes
-AllRouter.post("/change-request/submit", submitChangeRequest);
-AllRouter.put("/change-request/approve/:requestId", approveChangeRequest);
-AllRouter.put("/change-request/reject/:requestId", rejectChangeRequest);
 
 export default AllRouter;

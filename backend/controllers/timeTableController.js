@@ -231,7 +231,7 @@ export const generateTimetableDirectly = async (req, res) => {
   }
 };
 
-export const updateTimetable = async (req, res) => {
+export const updateTimetableu = async (req, res) => {
   try {
     const { projectId } = req.params;
     const {
@@ -1298,8 +1298,12 @@ export const getTimetableById = async (req, res) => {
       return res.status(404).json({ message: "Timetable not found." });
     }
 
-    if (req.user && req.user._id && timetable.createdBy && timetable.createdBy._id) {
-      if (timetable.createdBy._id.toString() !== req.user._id.toString()) {
+    if (req.user && req.user._id) {
+      const userIdStr = req.user._id.toString();
+      const isCreator = timetable.createdBy && timetable.createdBy._id.toString() === userIdStr;
+      const isAuthorizedUser = timetable.users && timetable.users.some(u => u.userId && u.userId._id.toString() === userIdStr);
+
+      if (!isCreator && !isAuthorizedUser) {
         return res.status(403).json({ message: "You don't have permission to access this timetable." });
       }
     }

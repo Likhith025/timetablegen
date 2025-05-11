@@ -73,20 +73,23 @@ export const processTimetableQuery = async (request) => {
 
     // 2. Send to AI for analysis
     const prompt = `
-You are a school timetable assistant. You will be given a user's message and the timetable data.
-If the user is asking for changes or modifications to the timetable, include the exact changes needed in JSON format at the end of your response.
+You are a school timetable assistant. You will be given a user's message and the timetable data. Respond in a natural, concise, and narrative-style text format, avoiding markdown, bullet points, or structured formatting. Do not include Free Periods or empty slots in the response unless explicitly requested. Focus only on the teacher's actual teaching slots, including the day, time, subject, grade section, and room.
+
+If the user requests changes or modifications to the timetable, first provide a natural response explaining the proposed changes or why they cannot be made. Then, include a JSON structure with the exact changes needed at the end of the response.
 
 IMPORTANT:
-- Free Period or empty slots should not be modified or moved. Free Period is considered an empty slot where teachers and students are free, so don't include any changes for Free Period slots.
+- Do not modify or move Free Period or empty slots. Free Periods are empty slots where teachers and students are free.
 - Verify the teacher's subjects before proposing changes. For Hindi Pandit, the subject codes are: ${teacherSubjects.join(', ')}. Do not propose changes for subjects not taught by the teacher (e.g., T-004, M-005).
-- Ensure the proposed new time slots are free for the teacher, grade section, and room. Check the timetable data to avoid scheduling conflicts.
+- Ensure proposed new time slots are free for the teacher, grade section, and room. Check the timetable data to avoid scheduling conflicts.
 - If a conflict is detected, suggest an alternative free slot or reject the change.
 
 User message: "${message}"
 Timetable Data: ${JSON.stringify(timetableObj)}
 
-First, respond naturally to the user's request.
-Then, if changes are needed, add a JSON structure with:
+For queries about a teacher's schedule, respond like this example:
+"Sarah Johnson's teaching schedule for the week is as follows: For Grade 9-A, she teaches English on Wednesday from 09:30 to 10:30 in Room 101. For Grade 9-B, she teaches English on Monday from 08:30 to 09:30 in Room 102. She has no classes scheduled for Grades 10-A and 10-B this week."
+
+For changes, respond naturally first, then add a JSON structure like:
 {
   "needsChanges": true,
   "changes": [
@@ -101,8 +104,7 @@ Then, if changes are needed, add a JSON structure with:
   ]
 }
 
-Remember, do not include any changes for slots with subject "Free Period" or empty/null subjects, and validate subject codes and slot availability.
-If no changes are needed, add: {"needsChanges": false}`;
+If no changes are needed, do not include any JSON in the response.`;
 
     // Send to Mistral API
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
@@ -125,7 +127,7 @@ If no changes are needed, add: {"needsChanges": false}`;
     });
 
     const result = await response.json();
-    const aiResponse = result.choices?.[0]?.message?.content || "No response from model.";
+    let aiResponse = result.choices?.[0]?.message?.content || "No response from model.";
 
     // 3. Extract the changes JSON (if any)
     const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```|(\{[\s\S]*?\})/);
@@ -134,6 +136,8 @@ If no changes are needed, add: {"needsChanges": false}`;
     if (jsonMatch) {
       const jsonString = jsonMatch[1] || jsonMatch[2];
       changesData = safeJsonParse(jsonString);
+      // Clean the AI response by removing the JSON part
+      aiResponse = aiResponse.replace(/```json[\s\S]*```|\{[\s\S]*?\}/, "").trim();
     }
 
     // 4. Validate and filter changes
@@ -172,14 +176,14 @@ If no changes are needed, add: {"needsChanges": false}`;
       // Return response with confirmation option if there are still changes
       if (changesData.needsChanges) {
         return {
-          message: aiResponse.replace(/```json[\s\S]*```/, "").trim(),
+          message: aiResponse,
           needsConfirmation: true,
           changes: changesData.changes
         };
       }
     }
 
-    // If no changes needed or invalid JSON, return the AI response
+    // Return the cleaned AI response (no JSON for non-change queries)
     return aiResponse;
 
   } catch (error) {
@@ -233,5 +237,3 @@ export const applyTimetableChanges = async (projectId, changes) => {
     return "Error applying changes: " + error.message;
   }
 };
-
-//
