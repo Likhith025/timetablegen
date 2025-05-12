@@ -505,7 +505,7 @@ export const updateTimetableu = async (req, res) => {
 export const generateTimetableSchedule = (timetableData) => {
   const schedules = {};
   const conflicts = [];
-  
+
   // Extract unique days from timeSlots
   const days = [...new Set(timetableData.timeSlots.map(slot => slot.day))].sort();
   if (days.length === 0) {
@@ -515,62 +515,19 @@ export const generateTimetableSchedule = (timetableData) => {
       generationStatus: "failed",
       conflicts,
       schedules: {},
-      algorithm: "consistent-grade-section",
-      version: "1.0"
+      algorithm: "genetic-algorithm",
+      version: "2.0"
     };
   }
-  
-  // Log extracted days for debugging
-  console.log("Extracted Days:", days);
-
-  // Validate that timeSlots exist for each day
-  days.forEach(day => {
-    const daySlots = timetableData.timeSlots.filter(slot => slot.day === day);
-    if (daySlots.length === 0) {
-      conflicts.push(`No time slots found for ${day}. Cannot schedule classes.`);
-    }
-    console.log(`Time slots for ${day}:`, daySlots);
-  });
-  
-  // Track subject assignments per grade-section to respect classesWeek
-  const subjectAssignmentCount = {};
-  // Track subjects scheduled per day for each grade-section with counts
-  const dailySubjectAssignments = {};
-  // Track faculty assignments per time slot to avoid double-booking
-  const facultyAssignments = {};
-  // Track room assignments per time slot to avoid double-booking
-  const roomAssignments = {};
-  
-  // Pre-assign dedicated rooms for each grade-section with classAssignmentType "same"
-  const gradeSectionRooms = {};
-  const reservedRoomMapping = {}; // Maps room -> grade-section
-  
-  // Track consistent time slot assignments for grade-sections
-  const timeSlotGradeSections = {}; // Maps timeSlot -> grade-section
-
-  // Track grade-section assignments per time slot to avoid double-booking
-  const gradeSectionAssignments = {};
-  // Track grade-sections scheduled per room per time slot to avoid double-booking
-  const roomGradeSectionAssignments = {};
 
   // Get unique time slots
   const uniqueTimeSlots = [...new Set(
     timetableData.timeSlots.map(slot => `${slot.startTime}-${slot.endTime}`)
-  )];
-  
-  // Sort time slots chronologically
-  uniqueTimeSlots.sort((a, b) => {
-    const timeA = a.split('-')[0];
-    const timeB = b.split('-')[0];
-    return timeA.localeCompare(timeB);
-  });
-  
-  // Initialize timeSlotGradeSections for all unique time slots
-  uniqueTimeSlots.forEach(timeSlot => {
-    timeSlotGradeSections[timeSlot] = [];
-  });
+  )].sort((a, b) => a.split('-')[0].localeCompare(b.split('-')[0]));
 
-  // Validate input data: Check if enough slots exist
+  // Validate input data: Check if enough slots and days exist, and rooms are sufficient
+  const slotConflicts = {};
+  const dayConflicts = {};
   timetableData.grades.forEach(grade => {
     const gradeSection = `${grade.grade}-${grade.section}`;
     const totalClassesNeeded = timetableData.subjects
@@ -579,46 +536,55 @@ export const generateTimetableSchedule = (timetableData) => {
 
     const totalAvailableSlots = days.length * uniqueTimeSlots.length;
     if (totalClassesNeeded > totalAvailableSlots) {
-      conflicts.push(
-        `Insufficient time slots for ${gradeSection}: ${totalClassesNeeded} classes needed, but only ${totalAvailableSlots} slots available`
-      );
+      timetableData.subjects
+        .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+        .forEach(subject => {
+          if (!slotConflicts[gradeSection]) slotConflicts[gradeSection] = [];
+          slotConflicts[gradeSection].push(subject.code);
+        });
     }
+
+    timetableData.subjects
+      .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+      .forEach(subject => {
+        const weeklyClasses = parseInt(subject.classesWeek);
+        if (weeklyClasses > days.length) {
+          if (!dayConflicts[gradeSection]) dayConflicts[gradeSection] = [];
+          dayConflicts[gradeSection].push(subject.code);
+        }
+      });
   });
 
-  // Initialize tracking structures
-  days.forEach(day => {
-    gradeSectionAssignments[day] = {};
-    roomGradeSectionAssignments[day] = {};
-    
-    uniqueTimeSlots.forEach(timeSlot => {
-      gradeSectionAssignments[day][timeSlot] = new Set();
-      roomGradeSectionAssignments[day][timeSlot] = {};
-    });
+  Object.entries(slotConflicts).forEach(([gradeSection, subjects]) => {
+    conflicts.push(`Telugu classes for ${gradeSection} need more teachers or time slots: ${subjects.join(", ")} require more slots than the ${days.length * uniqueTimeSlots.length} available. Add more time slots or teachers.`);
   });
-  
-  // Initialize schedules and assignment tracking
+  Object.entries(dayConflicts).forEach(([gradeSection, subjects]) => {
+    conflicts.push(`Telugu classes for ${gradeSection} need more days or teachers: ${subjects.join(", ")} require more days than the ${days.length} available. Add more days or teachers.`);
+  });
+
+  // Check for sufficient rooms
+  const totalRooms = timetableData.classes.length;
+  const gradesNeedingDedicatedRooms = timetableData.grades.filter(g => g.classAssignmentType === "same").length;
+  if (gradesNeedingDedicatedRooms > totalRooms) {
+    timetableData.grades
+      .filter(g => g.classAssignmentType === "same")
+      .slice(totalRooms)
+      .forEach(grade => {
+        const gradeSection = `${grade.grade}-${grade.section}`;
+        conflicts.push(`Class ${gradeSection} is fully packed, no available rooms for dedicated assignment. Add more rooms.`);
+      });
+  }
+
+  // Pre-assign dedicated rooms for each grade-section with classAssignmentType "same"
+  const gradeSectionRooms = {};
+  const reservedRoomMapping = {};
   timetableData.grades.forEach(grade => {
     const gradeSection = `${grade.grade}-${grade.section}`;
     schedules[gradeSection] = {};
-    subjectAssignmentCount[gradeSection] = {};
-    dailySubjectAssignments[gradeSection] = {};
-
-    // Initialize subject assignment counts
-    timetableData.subjects
-      .filter(subject => 
-        subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section)
-      )
-      .forEach(subject => {
-        subjectAssignmentCount[gradeSection][subject.code] = 0;
-      });
-
-    // Initialize daily subject assignments with counts
     days.forEach(day => {
       schedules[gradeSection][day] = [];
-      dailySubjectAssignments[gradeSection][day] = {};
     });
 
-    // Assign a dedicated room for grade-section when classAssignmentType is "same"
     if (grade.classAssignmentType === "same") {
       const availableRooms = timetableData.classes.filter(c => 
         parseInt(c.capacity) >= parseInt(grade.strength) &&
@@ -630,439 +596,1229 @@ export const generateTimetableSchedule = (timetableData) => {
         gradeSectionRooms[gradeSection] = assignedRoom;
         reservedRoomMapping[assignedRoom] = gradeSection;
       } else {
-        conflicts.push(`No suitable available room for ${gradeSection} with strength ${grade.strength}`);
+        conflicts.push(`Class ${gradeSection} is fully packed, no available rooms with strength ${grade.strength}. Add more rooms.`);
         gradeSectionRooms[gradeSection] = "Unassigned";
       }
     } else if (grade.classAssignmentType === "any") {
       const availableRooms = timetableData.classes.filter(c => 
         parseInt(c.capacity) >= parseInt(grade.strength)
       );
-      
       gradeSectionRooms[gradeSection] = availableRooms.length > 0 
         ? availableRooms[Math.floor(Math.random() * availableRooms.length)].room 
         : "Unassigned";
+      if (gradeSectionRooms[gradeSection] === "Unassigned") {
+        conflicts.push(`Class ${gradeSection} is fully packed, no available rooms with strength ${grade.strength}. Add more rooms.`);
+      }
     }
   });
 
-  // Initialize faculty and room assignments for each time slot
-  timetableData.timeSlots.forEach(slot => {
-    const timeSlotKey = `${slot.day}_${slot.startTime}-${slot.endTime}`;
-    facultyAssignments[timeSlotKey] = new Set();
-    roomAssignments[timeSlotKey] = new Set();
-  });
+  // Helper: Generate a random timetable (individual) with constraints
+  const generateRandomTimetable = () => {
+    const timetable = {};
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      timetable[gradeSection] = {};
+      days.forEach(day => {
+        timetable[gradeSection][day] = [];
+      });
 
-  // STEP 1: Create an assignment map for faculty to consistently teach the same grade-sections at the same time slots
-  const facultySubjects = {};
-  timetableData.subjects.forEach(subject => {
-    (subject.facultyIds || []).forEach(facultyId => {
-      if (!facultySubjects[facultyId]) {
-        facultySubjects[facultyId] = [];
-      }
-      facultySubjects[facultyId].push(subject);
-    });
-  });
-  
-  Object.entries(facultySubjects).forEach(([facultyId, subjects]) => {
-    uniqueTimeSlots.forEach(timeSlot => {
-      const applicableGradeSections = [];
-      
-      subjects.forEach(subject => {
-        subject.gradeSections.forEach(gs => {
-          const gradeSection = `${gs.grade}-${gs.section}`;
-          
-          const isApplicable = timetableData.timeSlots.some(slot => {
-            if (`${slot.startTime}-${slot.endTime}` !== timeSlot) return false;
-            
-            const slotApplicableTo = Array.isArray(slot.applicableTo) 
-              ? slot.applicableTo 
-              : [slot.applicableTo];
-              
-            return slotApplicableTo.some(item => 
-              item === gradeSection || 
-              item === `${gs.grade} - ${gs.section}`
-            );
-          });
-          
-          if (isApplicable && !applicableGradeSections.some(item => item.gradeSection === gradeSection)) {
-            applicableGradeSections.push({
-              gradeSection,
-              subject: subject.code,
-              faculty: facultyId
-            });
-          }
+      const subjectsForGrade = timetableData.subjects.filter(subject =>
+        subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section)
+      );
+
+      // Track scheduled subjects per day to enforce once-per-day (unless classesWeek > days.length)
+      const dailySubjectAssignments = {};
+      days.forEach(day => {
+        dailySubjectAssignments[gradeSection] = dailySubjectAssignments[gradeSection] || {};
+        dailySubjectAssignments[gradeSection][day] = {};
+      });
+
+      // Track grade-section assignments per time slot to avoid overlaps
+      const gradeSectionAssignments = {};
+      days.forEach(day => {
+        gradeSectionAssignments[day] = {};
+        uniqueTimeSlots.forEach(timeSlot => {
+          gradeSectionAssignments[day][timeSlot] = new Set();
         });
       });
-      
-      if (applicableGradeSections.length > 0) {
-        applicableGradeSections.sort((a, b) => {
-          const subjectA = timetableData.subjects.find(s => s.code === a.subject);
-          const subjectB = timetableData.subjects.find(s => s.code === b.subject);
-          if (!subjectA || !subjectB) return 0;
-          
-          const classesA = parseInt(subjectA.classesWeek);
-          const classesB = parseInt(subjectB.classesWeek);
-          return classesB - classesA;
+
+      // Track faculty and room assignments to avoid double-booking
+      const facultyAssignments = {};
+      const roomAssignments = {};
+      days.forEach(day => {
+        facultyAssignments[day] = {};
+        roomAssignments[day] = {};
+        uniqueTimeSlots.forEach(timeSlot => {
+          facultyAssignments[day][timeSlot] = new Set();
+          roomAssignments[day][timeSlot] = new Set();
         });
-        
-        const selected = applicableGradeSections[0];
-        
-        if (!timeSlotGradeSections[timeSlot].some(item => 
-            item.gradeSection === selected.gradeSection && 
-            item.faculty === selected.faculty)) {
-          timeSlotGradeSections[timeSlot].push({
-            gradeSection: selected.gradeSection,
-            subject: selected.subject,
-            faculty: selected.faculty
+      });
+
+      // Track subject counts to ensure classesWeek is met
+      const subjectCounts = {};
+      subjectsForGrade.forEach(subject => {
+        subjectCounts[subject.code] = 0;
+      });
+
+      // Check if any subject requires more classes than available days
+      const subjectsNeedingSameDayScheduling = new Set();
+      subjectsForGrade.forEach(subject => {
+        const weeklyClasses = parseInt(subject.classesWeek);
+        if (weeklyClasses > days.length) {
+          subjectsNeedingSameDayScheduling.add(subject.code);
+        }
+      });
+
+      // Create a list of all required classes to schedule
+      const classesToSchedule = [];
+      subjectsForGrade.forEach(subject => {
+        const weeklyClasses = parseInt(subject.classesWeek);
+        for (let i = 0; i < weeklyClasses; i++) {
+          classesToSchedule.push({ 
+            subject: subject.code, 
+            facultyIds: subject.facultyIds, 
+            assignedClasses: subject.assignedClasses 
           });
         }
-      }
-    });
-  });
-
-  // STEP 1.5: Ensure all subjects getscheduled
-  timetableData.subjects.forEach(subject => {
-    const weeklyClasses = parseInt(subject.classesWeek);
-    if (weeklyClasses <= 0) return;
-    
-    subject.gradeSections.forEach(gs => {
-      const gradeSection = `${gs.grade}-${gs.section}`;
-      let assignedCount = 0;
-      
-      uniqueTimeSlots.forEach(timeSlot => {
-        assignedCount += timeSlotGradeSections[timeSlot].filter(
-          assignment => 
-            assignment.gradeSection === gradeSection && 
-            assignment.subject === subject.code
-        ).length;
       });
-      
-      if (assignedCount < weeklyClasses) {
-        let availableTimeSlots = uniqueTimeSlots.filter(timeSlot => {
-          const isApplicable = timetableData.timeSlots.some(slot => {
-            if (`${slot.startTime}-${slot.endTime}` !== timeSlot) return false;
-            const slotApplicableTo = Array.isArray(slot.applicableTo) 
-              ? slot.applicableTo 
-              : [slot.applicableTo];
-            return slotApplicableTo.some(item => 
-              item === gradeSection || 
-              item === `${gs.grade} - ${gs.section}`
-            );
-          });
-          return isApplicable;
-        });
-        
-        // Create a shuffled copy
-        const shuffledTimeSlots = [...availableTimeSlots].sort(() => Math.random() - 0.5);
-        
-        for (const timeSlot of shuffledTimeSlots) {
-          if (assignedCount >= weeklyClasses) break;
-          
-          const existingAssignment = timeSlotGradeSections[timeSlot].find(
-            assignment => assignment.gradeSection === gradeSection
+
+      // Shuffle classes to randomize assignment
+      classesToSchedule.sort(() => Math.random() - 0.5);
+
+      // Create a list of available day-time slot pairs
+      let availableSlots = [];
+      days.forEach(day => {
+        uniqueTimeSlots.forEach((timeSlot, timeSlotIndex) => {
+          const slot = timetableData.timeSlots.find(slot => 
+            slot.day === day && `${slot.startTime}-${slot.endTime}` === timeSlot
           );
-          
-          if (existingAssignment) {
-            const existingSubject = timetableData.subjects.find(s => s.code === existingAssignment.subject);
-            if (!existingSubject) continue;
-            
-            let existingSubjectCount = 0;
-            uniqueTimeSlots.forEach(ts => {
-              existingSubjectCount += timeSlotGradeSections[ts].filter(
-                assignment => 
-                  assignment.gradeSection === gradeSection && 
-                  assignment.subject === existingAssignment.subject
-              ).length;
-            });
-            
-            if (existingSubjectCount > parseInt(existingSubject.classesWeek)) {
-              existingAssignment.subject = subject.code;
-              existingAssignment.faculty = subject.facultyIds && subject.facultyIds.length > 0 ? subject.facultyIds[0] : "";
-              assignedCount++;
-            }
-          } else {
-            timeSlotGradeSections[timeSlot].push({
-              gradeSection,
-              subject: subject.code,
-              faculty: subject.facultyIds && subject.facultyIds.length > 0 ? subject.facultyIds[0] : ""
-            });
-            assignedCount++;
+          if (!slot) return;
+          const slotApplicableTo = Array.isArray(slot.applicableTo) ? slot.applicableTo : [slot.applicableTo];
+          if (slotApplicableTo.some(item => item === gradeSection || item === `${grade.grade} - ${grade.section}`)) {
+            availableSlots.push({ day, timeSlot, timeSlotIndex });
           }
+        });
+      });
+
+      // Shuffle slots to randomize assignment
+      availableSlots.sort(() => Math.random() - 0.5);
+
+      // Schedule all required classes
+      for (const classToSchedule of classesToSchedule) {
+        const subjectCode = classToSchedule.subject;
+        const facultyIds = classToSchedule.facultyIds;
+        const assignedClasses = classToSchedule.assignedClasses;
+
+        let scheduled = false;
+        for (const { day, timeSlot, timeSlotIndex } of availableSlots) {
+          // Once-per-day constraint (unless classesWeek > days.length)
+          if (dailySubjectAssignments[gradeSection][day][subjectCode] && !subjectsNeedingSameDayScheduling.has(subjectCode)) {
+            continue;
+          }
+
+          // No overlapping classes
+          if (gradeSectionAssignments[day][timeSlot].has(gradeSection)) {
+            continue;
+          }
+
+          // Select faculty
+          const facultyId = facultyIds[Math.floor(Math.random() * facultyIds.length)];
+          if (facultyAssignments[day][timeSlot].has(facultyId)) {
+            continue;
+          }
+
+          // Select room
+          let possibleRooms = [];
+          if (assignedClasses && assignedClasses.length > 0) {
+            possibleRooms = assignedClasses;
+          } else if (grade.classAssignmentType === "same") {
+            possibleRooms = [gradeSectionRooms[gradeSection]];
+          } else {
+            possibleRooms = timetableData.classes
+              .filter(c => parseInt(c.capacity) >= parseInt(grade.strength))
+              .map(c => c.room);
+          }
+
+          const availableRooms = possibleRooms.filter(room => 
+            room !== "Unassigned" && !roomAssignments[day][timeSlot].has(room)
+          );
+          if (availableRooms.length === 0) continue;
+
+          const room = availableRooms[Math.floor(Math.random() * availableRooms.length)];
+
+          timetable[gradeSection][day].push({
+            timeSlot,
+            subject: subjectCode,
+            faculty: facultyId,
+            room
+          });
+
+          dailySubjectAssignments[gradeSection][day][subjectCode] = true;
+          gradeSectionAssignments[day][timeSlot].add(gradeSection);
+          facultyAssignments[day][timeSlot].add(facultyId);
+          roomAssignments[day][timeSlot].add(room);
+          subjectCounts[subjectCode]++;
+          scheduled = true;
+          break;
         }
-        
-        if (assignedCount < weeklyClasses) {
-          conflicts.push(`Could not schedule all ${weeklyClasses} classes for ${subject.code} in ${gradeSection}`);
+
+        if (!scheduled) {
+          conflicts.push(`Could not schedule class for ${subjectCode} in ${gradeSection} due to constraints (once-per-day, no overlapping, or faculty/room availability). Add more slots, days, or resources, or relax constraints.`);
         }
       }
-    });
-  });
 
-  // STEP 2: Schedule subjects based on the consistent faculty-grade-section assignments
-  days.forEach(day => {
-    // Get time slots for the day, or use all unique time slots as fallback
-    let daySlots = timetableData.timeSlots
-      .filter(slot => slot.day === day)
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-    
-    // Fallback: If no slots for the day, use unique time slots with default applicableTo
-    if (daySlots.length === 0) {
-      console.warn(`No time slots found for ${day}. Using fallback time slots.`);
-      daySlots = uniqueTimeSlots.map(timeSlot => {
-        const [startTime, endTime] = timeSlot.split('-');
-        return {
-          day,
-          startTime,
-          endTime,
-          applicableTo: timetableData.grades.map(g => `${g.grade}-${g.section}`)
-        };
-      });
-      conflicts.push(`No specific time slots defined for ${day}. Using default time slots for scheduling.`);
-    }
-    
-    daySlots.forEach(slot => {
-      const timeSlot = `${slot.startTime}-${slot.endTime}`;
-      const timeSlotKey = `${day}_${timeSlot}`;
-      
-      const timeSlotAssignments = timeSlotGradeSections[timeSlot] || [];
-      
-      timeSlotAssignments.forEach(assignment => {
-        const { gradeSection, subject: preferredSubject, faculty } = assignment;
-        
-        const slotApplicableTo = Array.isArray(slot.applicableTo) 
-          ? slot.applicableTo 
-          : [slot.applicableTo];
-        
-        const [gradeNum, section] = gradeSection.split('-');
-        const isApplicable = slotApplicableTo.some(item => 
-          item === gradeSection || item === `${gradeNum} - ${section}`
-        );
-        
-        if (!isApplicable) return;
-        
-        const grade = timetableData.grades.find(g => g.grade === gradeNum && g.section === section);
-        if (!grade) return;
-        
-        const assignedRoom = gradeSectionRooms[gradeSection];
-        
-        const subjectObj = timetableData.subjects.find(s => s.code === preferredSubject);
-        
-        let availableSubjects = [];
-        if (subjectObj && 
-            subjectObj.facultyIds.includes(faculty) &&
-            subjectAssignmentCount[gradeSection][preferredSubject] < parseInt(subjectObj.classesWeek) &&
-            !dailySubjectAssignments[gradeSection][day][preferredSubject]) {
-          availableSubjects = [subjectObj];
-        } else {
-          availableSubjects = timetableData.subjects
-            .filter(subject => 
-              subject.gradeSections.some(gs => gs.grade === gradeNum && gs.section === section) &&
-              subject.facultyIds.includes(faculty) &&
-              subjectAssignmentCount[gradeSection][subject.code] < parseInt(subject.classesWeek) &&
-              !dailySubjectAssignments[gradeSection][day][subject.code]
-            )
-            .sort((a, b) => 
-              (parseInt(b.classesWeek) - subjectAssignmentCount[gradeSection][b.code]) - 
-              (parseInt(a.classesWeek) - subjectAssignmentCount[gradeSection][a.code])
-            );
-        }
-        
-        if (availableSubjects.length > 0) {
-          let scheduledSubject = false;
-          
-          for (const subject of availableSubjects) {
-            for (const faculty of subject.facultyIds) {
-              if (facultyAssignments[timeSlotKey].has(faculty)) continue;
-              
-              let possibleRooms = [];
-              if (subject.assignedClasses && subject.assignedClasses.length > 0) {
-                possibleRooms = subject.assignedClasses;
-              } else if (grade.classAssignmentType === "same") {
-                possibleRooms = [assignedRoom];
-              } else {
-                possibleRooms = timetableData.classes
-                  .filter(c => parseInt(c.capacity) >= parseInt(grade.strength))
-                  .map(c => c.room);
-              }
-              
-              const availableRooms = possibleRooms.filter(room => {
-                if (roomAssignments[timeSlotKey].has(room)) return false;
-                if (reservedRoomMapping[room] && reservedRoomMapping[room] !== gradeSection) return false;
-                return room !== "Unassigned";
-              });
-              
-              if (availableRooms.length > 0) {
-                if (gradeSectionAssignments[day][timeSlot].has(gradeSection)) {
-                  conflicts.push(`Grade-section ${gradeSection} already scheduled on ${day} at ${timeSlot}`);
-                  continue;
-                }
-                
-                const selectedRoom = availableRooms[0];
-                
-                if (roomGradeSectionAssignments[day][timeSlot][selectedRoom]) {
-                  if (roomGradeSectionAssignments[day][timeSlot][selectedRoom] === gradeSection) {
-                    schedules[gradeSection][day] = schedules[gradeSection][day].filter(
-                      item => item.timeSlot !== timeSlot || item.room !== selectedRoom
-                    );
-                  } else {
-                    conflicts.push(
-                      `Room ${selectedRoom} already occupied by ${roomGradeSectionAssignments[day][timeSlot][selectedRoom]} on ${day} at ${timeSlot}`
-                    );
-                    continue;
-                  }
-                }
-                
-                subjectAssignmentCount[gradeSection][subject.code]++;
-                dailySubjectAssignments[gradeSection][day][subject.code] = 1;
-                facultyAssignments[timeSlotKey].add(faculty);
-                roomAssignments[timeSlotKey].add(selectedRoom);
-                gradeSectionAssignments[day][timeSlot].add(gradeSection);
-                roomGradeSectionAssignments[day][timeSlot][selectedRoom] = gradeSection;
-                
-                schedules[gradeSection][day].push({
-                  timeSlot: timeSlot,
-                  subject: subject.code,
-                  faculty: faculty,
-                  room: selectedRoom
-                });
-                
-                scheduledSubject = true;
-                break;
-              }
-            }
-            if (scheduledSubject) break;
-          }
-          
-          if (!scheduledSubject) {
-            if (assignedRoom !== "Unassigned" && !roomGradeSectionAssignments[day][timeSlot][assignedRoom]) {
-              roomGradeSectionAssignments[day][timeSlot][assignedRoom] = gradeSection;
-              schedules[gradeSection][day].push({
-                timeSlot: timeSlot,
-                subject: "Free Period",
-                faculty: "",
-                room: assignedRoom
-              });
-            }
-            conflicts.push(`No available room/faculty for ${gradeSection} on ${day} at ${timeSlot}`);
-          }
-        } else {
-          if (assignedRoom !== "Unassigned" && !roomGradeSectionAssignments[day][timeSlot][assignedRoom]) {
-            roomGradeSectionAssignments[day][timeSlot][assignedRoom] = gradeSection;
-            schedules[gradeSection][day].push({
-              timeSlot: timeSlot,
+      // Fill remaining slots with Free Periods, ensuring no duplicates
+      availableSlots.forEach(({ day, timeSlot }) => {
+        if (!gradeSectionAssignments[day][timeSlot].has(gradeSection)) {
+          const room = grade.classAssignmentType === "same" ? gradeSectionRooms[gradeSection] : timetableData.classes
+            .filter(c => parseInt(c.capacity) >= parseInt(grade.strength))
+            .map(c => c.room)[0];
+          if (room && !roomAssignments[day][timeSlot].has(room)) {
+            timetable[gradeSection][day].push({
+              timeSlot,
               subject: "Free Period",
               faculty: "",
-              room: assignedRoom
+              room
             });
+            gradeSectionAssignments[day][timeSlot].add(gradeSection);
+            roomAssignments[day][timeSlot].add(room);
           }
-          conflicts.push(`No available subjects for ${gradeSection} on ${day} at ${timeSlot}`);
         }
       });
     });
-  });
+    return timetable;
+  };
 
-  // STEP 2.5: Fill gaps for subjects not fully scheduled
+  // Fitness function: Evaluate a timetable
+  const evaluateFitness = (timetable) => {
+    let fitness = 0;
+    const localConflicts = [];
+
+    // Track subject counts to ensure classesWeek is met
+    const subjectCounts = {};
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      subjectCounts[gradeSection] = {};
+      timetableData.subjects
+        .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+        .forEach(subject => {
+          subjectCounts[gradeSection][subject.code] = 0;
+        });
+    });
+
+    // Track assignments to detect violations
+    const facultyAssignments = {};
+    const roomAssignments = {};
+    const gradeSectionAssignments = {};
+    const dailySubjectAssignments = {};
+    const dailySubjectCounts = {};
+
+    days.forEach(day => {
+      facultyAssignments[day] = {};
+      roomAssignments[day] = {};
+      gradeSectionAssignments[day] = {};
+      uniqueTimeSlots.forEach(timeSlot => {
+        facultyAssignments[day][timeSlot] = new Set();
+        roomAssignments[day][timeSlot] = new Set();
+        gradeSectionAssignments[day][timeSlot] = new Set();
+      });
+
+      timetableData.grades.forEach(grade => {
+        const gradeSection = `${grade.grade}-${grade.section}`;
+        dailySubjectAssignments[gradeSection] = dailySubjectAssignments[gradeSection] || {};
+        dailySubjectAssignments[gradeSection][day] = {};
+        dailySubjectCounts[gradeSection] = dailySubjectCounts[gradeSection] || {};
+        dailySubjectCounts[gradeSection][day] = {};
+      });
+    });
+
+    // Check if any subject requires more classes than available days
+    const subjectsNeedingSameDayScheduling = new Set();
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      const subjectsForGrade = timetableData.subjects.filter(subject =>
+        subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section)
+      );
+      subjectsForGrade.forEach(subject => {
+        const weeklyClasses = parseInt(subject.classesWeek);
+        if (weeklyClasses > days.length) {
+          subjectsNeedingSameDayScheduling.add(`${gradeSection}:${subject.code}`);
+        }
+      });
+    });
+
+    // Evaluate constraints
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      days.forEach(day => {
+        const daySchedule = timetable[gradeSection][day];
+        daySchedule.sort((a, b) => a.timeSlot.split('-')[0].localeCompare(b.timeSlot.split('-')[0]));
+
+        // Track entries per time slot to detect duplicates and multiple subjects
+        const slotEntries = {};
+        const slotSubjects = {};
+        uniqueTimeSlots.forEach(timeSlot => {
+          slotEntries[timeSlot] = [];
+          slotSubjects[timeSlot] = new Set();
+        });
+
+        for (let i = 0; i < daySchedule.length; i++) {
+          const current = daySchedule[i];
+          slotEntries[current.timeSlot].push(current);
+          if (current.subject !== "Free Period") {
+            slotSubjects[current.timeSlot].add(current.subject);
+          }
+        }
+
+        // Check for duplicates (multiple entries in the same slot)
+        for (const timeSlot of uniqueTimeSlots) {
+          const entries = slotEntries[timeSlot];
+          if (entries.length > 1) {
+            fitness -= entries.length * 40; // Heavy penalty for duplicate entries
+            localConflicts.push(`Multiple entries scheduled for ${gradeSection} at ${timeSlot} on ${day}.`);
+          }
+
+          // Check for multiple subjects in the same slot
+          const subjectsInSlot = slotSubjects[timeSlot];
+          if (subjectsInSlot.size > 1) {
+            fitness -= subjectsInSlot.size * 50; // Heavy penalty for multiple subjects
+            localConflicts.push(`Multiple subjects (${Array.from(subjectsInSlot).join(", ")}) scheduled for ${gradeSection} at ${timeSlot} on ${day}.`);
+          }
+        }
+
+        for (let i = 0; i < daySchedule.length; i++) {
+          const current = daySchedule[i];
+
+          // Once-per-day constraint (unless classesWeek > days.length)
+          if (current.subject !== "Free Period") {
+            dailySubjectCounts[gradeSection][day][current.subject] = (dailySubjectCounts[gradeSection][day][current.subject] || 0) + 1;
+            if (dailySubjectAssignments[gradeSection][day][current.subject]) {
+              const key = `${gradeSection}:${current.subject}`;
+              if (!subjectsNeedingSameDayScheduling.has(key)) {
+                fitness -= 30; // Penalty for unnecessary same-day scheduling
+                localConflicts.push(`Subject ${current.subject} scheduled multiple times for ${gradeSection} on ${day}, but classesWeek (${timetableData.subjects.find(s => s.code === current.subject).classesWeek}) does not require it.`);
+              }
+            }
+            dailySubjectAssignments[gradeSection][day][current.subject] = true;
+          }
+
+          // No overlapping classes
+          if (gradeSectionAssignments[day][current.timeSlot].has(gradeSection)) {
+            fitness -= 50; // Penalty for overlapping classes
+            localConflicts.push(`Grade-section ${gradeSection} scheduled for multiple classes at ${current.timeSlot} on ${day}.`);
+          } else {
+            gradeSectionAssignments[day][current.timeSlot].add(gradeSection);
+          }
+
+          // Faculty and room conflicts
+          if (current.subject !== "Free Period") {
+            if (facultyAssignments[day][current.timeSlot].has(current.faculty)) {
+              fitness -= 20; // Penalty for faculty double-booking
+              localConflicts.push(`Faculty ${current.faculty} double-booked at ${current.timeSlot} on ${day}.`);
+            } else {
+              facultyAssignments[day][current.timeSlot].add(current.faculty);
+            }
+
+            if (roomAssignments[day][current.timeSlot].has(current.room)) {
+              fitness -= 20; // Penalty for room double-booking
+              localConflicts.push(`Room ${current.room} double-booked at ${current.timeSlot} on ${day}.`);
+            } else {
+              roomAssignments[day][current.timeSlot].add(current.room);
+            }
+          }
+
+          // Increment subject count
+          if (current.subject !== "Free Period") {
+            subjectCounts[gradeSection][current.subject] = (subjectCounts[gradeSection][current.subject] || 0) + 1;
+          }
+        }
+      });
+    });
+
+    // Check classesWeek requirement
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      timetableData.subjects
+        .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+        .forEach(subject => {
+          const required = parseInt(subject.classesWeek);
+          const scheduled = subjectCounts[gradeSection][subject.code] || 0;
+          if (scheduled < required) {
+            fitness -= (required - scheduled) * 30; // Penalty for under-scheduling
+            localConflicts.push(`Subject ${subject.code} for ${gradeSection} scheduled ${scheduled} times, requires ${required}. Add more slots or days.`);
+          } else if (scheduled > required) {
+            fitness -= (scheduled - required) * 20; // Penalty for over-scheduling
+            localConflicts.push(`Subject ${subject.code} for ${gradeSection} scheduled ${scheduled} times, exceeds required ${required}. Reduce scheduled classes.`);
+          }
+        });
+    });
+
+    return { fitness, conflicts: localConflicts };
+  };
+
+  // Crossover: Combine two parent timetables and fix under-scheduling/violations
+  function crossover(parent1, parent2) {
+    const child = {};
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      child[gradeSection] = {};
+      days.forEach(day => {
+        child[gradeSection][day] = [];
+        const schedule1 = parent1[gradeSection][day];
+        const schedule2 = parent2[gradeSection][day];
+        const mergedSchedule = [...schedule1, ...schedule2];
+        const uniqueSlots = [...new Set(mergedSchedule.map(item => item.timeSlot))];
+
+        uniqueSlots.forEach(timeSlot => {
+          const entries = mergedSchedule.filter(item => item.timeSlot === timeSlot);
+          let selectedEntry = null;
+          // Prefer a class over a Free Period, and handle multiple classes
+          const classEntries = entries.filter(entry => entry.subject !== "Free Period");
+          if (classEntries.length > 1) {
+            // If multiple classes, pick one and reschedule the others later
+            selectedEntry = classEntries[Math.floor(Math.random() * classEntries.length)];
+          } else if (classEntries.length === 1) {
+            selectedEntry = classEntries[0];
+          } else {
+            selectedEntry = entries[0]; // If all are Free Periods, take the first one
+          }
+          child[gradeSection][day].push(selectedEntry);
+        });
+      });
+    });
+
+    // Fix over-scheduling, under-scheduling, and other violations
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      const subjectCounts = {};
+      timetableData.subjects
+        .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+        .forEach(subject => {
+          subjectCounts[subject.code] = 0;
+        });
+
+      // Track assignments to avoid violations
+      const dailySubjectAssignments = {};
+      const gradeSectionAssignments = {};
+      const facultyAssignments = {};
+      const roomAssignments = {};
+      days.forEach(day => {
+        dailySubjectAssignments[gradeSection] = dailySubjectAssignments[gradeSection] || {};
+        dailySubjectAssignments[gradeSection][day] = {};
+        gradeSectionAssignments[day] = {};
+        facultyAssignments[day] = {};
+        roomAssignments[day] = {};
+        uniqueTimeSlots.forEach(timeSlot => {
+          gradeSectionAssignments[day][timeSlot] = new Set();
+          facultyAssignments[day][timeSlot] = new Set();
+          roomAssignments[day][timeSlot] = new Set();
+        });
+      });
+
+      // Check if any subject requires more classes than available days
+      const subjectsNeedingSameDayScheduling = new Set();
+      const subjectsForGrade = timetableData.subjects.filter(subject =>
+        subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section)
+      );
+      subjectsForGrade.forEach(subject => {
+        const weeklyClasses = parseInt(subject.classesWeek);
+        if (weeklyClasses > days.length) {
+          subjectsNeedingSameDayScheduling.add(subject.code);
+        }
+      });
+
+      // Count scheduled classes and rebuild assignments
+      days.forEach(day => {
+        child[gradeSection][day].forEach(entry => {
+          if (entry.subject !== "Free Period") {
+            subjectCounts[entry.subject]++;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = true;
+            gradeSectionAssignments[day][entry.timeSlot].add(gradeSection);
+            facultyAssignments[day][entry.timeSlot].add(entry.faculty);
+            roomAssignments[day][entry.timeSlot].add(entry.room);
+          }
+        });
+      });
+
+      // Fix violations: same subject on same day, faculty/room double-booking
+      days.forEach(day => {
+        const daySchedule = child[gradeSection][day];
+        daySchedule.sort((a, b) => a.timeSlot.split('-')[0].localeCompare(b.timeSlot.split('-')[0]));
+
+        // Track subjects scheduled on this day
+        const subjectsThisDay = {};
+        for (let i = 0; i < daySchedule.length; i++) {
+          const entry = daySchedule[i];
+          if (entry.subject === "Free Period") continue;
+
+          // Same subject on same day (only a problem if not necessary)
+          if (subjectsThisDay[entry.subject] && !subjectsNeedingSameDayScheduling.has(entry.subject)) {
+            daySchedule[i] = {
+              timeSlot: entry.timeSlot,
+              subject: "Free Period",
+              faculty: "",
+              room: entry.room
+            };
+            subjectCounts[entry.subject]--;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+            gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+            facultyAssignments[day][entry.timeSlot].delete(entry.faculty);
+            roomAssignments[day][entry.timeSlot].delete(entry.room);
+            continue;
+          }
+          subjectsThisDay[entry.subject] = true;
+        }
+      });
+
+      // Fix faculty/room double-booking
+      days.forEach(day => {
+        const daySchedule = child[gradeSection][day];
+        const facultyThisSlot = {};
+        const roomThisSlot = {};
+        uniqueTimeSlots.forEach(timeSlot => {
+          facultyThisSlot[timeSlot] = new Set();
+          roomThisSlot[timeSlot] = new Set();
+        });
+
+        for (let i = 0; i < daySchedule.length; i++) {
+          const entry = daySchedule[i];
+          if (entry.subject === "Free Period") continue;
+
+          const timeSlot = entry.timeSlot;
+          if (facultyThisSlot[timeSlot].has(entry.faculty)) {
+            daySchedule[i] = {
+              timeSlot: entry.timeSlot,
+              subject: "Free Period",
+              faculty: "",
+              room: entry.room
+            };
+            subjectCounts[entry.subject]--;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+            gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+            roomAssignments[day][timeSlot].delete(entry.room);
+            continue;
+          }
+          facultyThisSlot[timeSlot].add(entry.faculty);
+
+          if (roomThisSlot[timeSlot].has(entry.room)) {
+            daySchedule[i] = {
+              timeSlot: entry.timeSlot,
+              subject: "Free Period",
+              faculty: "",
+              room: entry.room
+            };
+            subjectCounts[entry.subject]--;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+            gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+            facultyAssignments[day][timeSlot].delete(entry.faculty);
+            continue;
+          }
+          roomThisSlot[timeSlot].add(entry.room);
+        }
+      });
+
+      // Schedule missing classes
+      timetableData.subjects
+        .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+        .forEach(subject => {
+          const required = parseInt(subject.classesWeek);
+          const scheduled = subjectCounts[subject.code] || 0;
+          let toSchedule = required - scheduled;
+
+          let availableSlots = [];
+          days.forEach(day => {
+            uniqueTimeSlots.forEach((timeSlot, timeSlotIndex) => {
+              const slot = timetableData.timeSlots.find(slot => 
+                slot.day === day && `${slot.startTime}-${slot.endTime}` === timeSlot
+              );
+              if (!slot) return;
+              const slotApplicableTo = Array.isArray(slot.applicableTo) ? slot.applicableTo : [slot.applicableTo];
+              if (slotApplicableTo.some(item => item === gradeSection || item === `${grade.grade} - ${grade.section}`)) {
+                availableSlots.push({ day, timeSlot, timeSlotIndex });
+              }
+            });
+          });
+
+          availableSlots.sort(() => Math.random() - 0.5);
+
+          for (const { day, timeSlot, timeSlotIndex } of availableSlots) {
+            if (toSchedule <= 0) break;
+
+            // Once-per-day constraint (unless classesWeek > days.length)
+            if (dailySubjectAssignments[gradeSection][day][subject.code] && !subjectsNeedingSameDayScheduling.has(subject.code)) {
+              continue;
+            }
+
+            // No overlapping classes
+            if (gradeSectionAssignments[day][timeSlot].has(gradeSection)) {
+              // Try to replace a Free Period
+              const existingEntry = child[gradeSection][day].find(entry => entry.timeSlot === timeSlot);
+              if (existingEntry && existingEntry.subject === "Free Period") {
+                child[gradeSection][day] = child[gradeSection][day].filter(entry => entry !== existingEntry);
+                gradeSectionAssignments[day][timeSlot].delete(gradeSection);
+                facultyAssignments[day][timeSlot].delete(existingEntry.faculty);
+                roomAssignments[day][timeSlot].delete(existingEntry.room);
+              } else {
+                continue;
+              }
+            }
+
+            // Randomly select faculty
+            const facultyId = subject.facultyIds[Math.floor(Math.random() * subject.facultyIds.length)];
+            if (facultyAssignments[day][timeSlot].has(facultyId)) {
+              continue;
+            }
+
+            // Select room
+            let possibleRooms = [];
+            if (subject.assignedClasses && subject.assignedClasses.length > 0) {
+              possibleRooms = subject.assignedClasses;
+            } else if (grade.classAssignmentType === "same") {
+              possibleRooms = [gradeSectionRooms[gradeSection]];
+            } else {
+              possibleRooms = timetableData.classes
+                .filter(c => parseInt(c.capacity) >= parseInt(grade.strength))
+                .map(c => c.room);
+            }
+
+            const availableRooms = possibleRooms.filter(room => 
+              room !== "Unassigned" && !roomAssignments[day][timeSlot].has(room)
+            );
+            if (availableRooms.length === 0) continue;
+
+            const room = availableRooms[Math.floor(Math.random() * availableRooms.length)];
+
+            child[gradeSection][day].push({
+              timeSlot,
+              subject: subject.code,
+              faculty: facultyId,
+              room
+            });
+
+            toSchedule--;
+            subjectCounts[subject.code]++;
+            dailySubjectAssignments[gradeSection][day][subject.code] = true;
+            gradeSectionAssignments[day][timeSlot].add(gradeSection);
+            facultyAssignments[day][timeSlot].add(facultyId);
+            roomAssignments[day][timeSlot].add(room);
+          }
+
+          if (toSchedule > 0) {
+            conflicts.push(`Could not schedule ${toSchedule} remaining classes for ${subject.code} in ${gradeSection} due to constraints (once-per-day, no overlapping, or faculty/room availability). Add more slots, days, or resources, or relax constraints.`);
+          }
+        });
+    });
+
+    return child;
+  }
+
+  // Mutation: Randomly alter a timetable and fix under-scheduling/violations
+  function mutate(timetable) {
+    // Randomly alter existing entries
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      days.forEach(day => {
+        const schedule = timetable[gradeSection][day];
+        if (Math.random() < 0.05) {
+          if (schedule.length > 0) {
+            const index = Math.floor(Math.random() * schedule.length);
+            const entry = schedule[index];
+            if (entry.subject === "Free Period") return;
+
+            // Check subject counts to prevent over-scheduling
+            const subjectCounts = {};
+            timetableData.subjects
+              .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+              .forEach(subject => {
+                subjectCounts[subject.code] = 0;
+              });
+
+            days.forEach(d => {
+              timetable[gradeSection][d].forEach(e => {
+                if (e.subject !== "Free Period") {
+                  subjectCounts[e.subject]++;
+                }
+              });
+            });
+
+            const required = parseInt(timetableData.subjects.find(subject => subject.code === entry.subject).classesWeek);
+            if (subjectCounts[entry.subject] > required) {
+              schedule[index] = {
+                timeSlot: entry.timeSlot,
+                subject: "Free Period",
+                faculty: "",
+                room: entry.room
+              };
+              return;
+            }
+
+            const subjects = timetableData.subjects.filter(subject =>
+              subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section) &&
+              (subjectCounts[subject.code] || 0) < parseInt(subject.classesWeek)
+            );
+            if (subjects.length === 0) return;
+
+            const newSubject = subjects[Math.floor(Math.random() * subjects.length)];
+            const facultyId = newSubject.facultyIds[Math.floor(Math.random() * newSubject.facultyIds.length)];
+            let possibleRooms = grade.classAssignmentType === "same" ? [gradeSectionRooms[gradeSection]] : timetableData.classes
+              .filter(c => parseInt(c.capacity) >= parseInt(grade.strength))
+              .map(c => c.room);
+            possibleRooms = possibleRooms.filter(room => room !== "Unassigned");
+            const room = possibleRooms[Math.floor(Math.random() * possibleRooms.length)] || "Unassigned";
+            if (room !== "Unassigned") {
+              entry.subject = newSubject.code;
+              entry.faculty = facultyId;
+              entry.room = room;
+            }
+          }
+        }
+      });
+    });
+
+    // Fix under-scheduling and violations
+    timetableData.grades.forEach(grade => {
+      const gradeSection = `${grade.grade}-${grade.section}`;
+      const subjectCounts = {};
+      timetableData.subjects
+        .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+        .forEach(subject => {
+          subjectCounts[subject.code] = 0;
+        });
+
+      // Track assignments to avoid violations
+      const dailySubjectAssignments = {};
+      const gradeSectionAssignments = {};
+      const facultyAssignments = {};
+      const roomAssignments = {};
+      days.forEach(day => {
+        dailySubjectAssignments[gradeSection] = dailySubjectAssignments[gradeSection] || {};
+        dailySubjectAssignments[gradeSection][day] = {};
+        gradeSectionAssignments[day] = {};
+        facultyAssignments[day] = {};
+        roomAssignments[day] = {};
+        uniqueTimeSlots.forEach(timeSlot => {
+          gradeSectionAssignments[day][timeSlot] = new Set();
+          facultyAssignments[day][timeSlot] = new Set();
+          roomAssignments[day][timeSlot] = new Set();
+        });
+      });
+
+      // Check if any subject requires more classes than available days
+      const subjectsNeedingSameDayScheduling = new Set();
+      const subjectsForGrade = timetableData.subjects.filter(subject =>
+        subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section)
+      );
+      subjectsForGrade.forEach(subject => {
+        const weeklyClasses = parseInt(subject.classesWeek);
+        if (weeklyClasses > days.length) {
+          subjectsNeedingSameDayScheduling.add(subject.code);
+        }
+      });
+
+      // Count scheduled classes and rebuild assignments
+      days.forEach(day => {
+        timetable[gradeSection][day].forEach(entry => {
+          if (entry.subject !== "Free Period") {
+            subjectCounts[entry.subject]++;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = true;
+            gradeSectionAssignments[day][entry.timeSlot].add(gradeSection);
+            facultyAssignments[day][entry.timeSlot].add(entry.faculty);
+            roomAssignments[day][entry.timeSlot].add(entry.room);
+          }
+        });
+      });
+
+      // Fix violations: same subject on same day, faculty/room double-booking
+      days.forEach(day => {
+        const daySchedule = timetable[gradeSection][day];
+        daySchedule.sort((a, b) => a.timeSlot.split('-')[0].localeCompare(b.timeSlot.split('-')[0]));
+
+        // Track subjects scheduled on this day
+        const subjectsThisDay = {};
+        for (let i = 0; i < daySchedule.length; i++) {
+          const entry = daySchedule[i];
+          if (entry.subject === "Free Period") continue;
+
+          // Same subject on same day (only a problem if not necessary)
+          if (subjectsThisDay[entry.subject] && !subjectsNeedingSameDayScheduling.has(entry.subject)) {
+            daySchedule[i] = {
+              timeSlot: entry.timeSlot,
+              subject: "Free Period",
+              faculty: "",
+              room: entry.room
+            };
+            subjectCounts[entry.subject]--;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+            gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+            facultyAssignments[day][entry.timeSlot].delete(entry.faculty);
+            roomAssignments[day][entry.timeSlot].delete(entry.room);
+            continue;
+          }
+          subjectsThisDay[entry.subject] = true;
+        }
+      });
+
+      // Fix faculty/room double-booking
+      days.forEach(day => {
+        const daySchedule = timetable[gradeSection][day];
+        const facultyThisSlot = {};
+        const roomThisSlot = {};
+        uniqueTimeSlots.forEach(timeSlot => {
+          facultyThisSlot[timeSlot] = new Set();
+          roomThisSlot[timeSlot] = new Set();
+        });
+
+        for (let i = 0; i < daySchedule.length; i++) {
+          const entry = daySchedule[i];
+          if (entry.subject === "Free Period") continue;
+
+          const timeSlot = entry.timeSlot;
+          if (facultyThisSlot[timeSlot].has(entry.faculty)) {
+            daySchedule[i] = {
+              timeSlot: entry.timeSlot,
+              subject: "Free Period",
+              faculty: "",
+              room: entry.room
+            };
+            subjectCounts[entry.subject]--;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+            gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+            roomAssignments[day][entry.timeSlot].delete(entry.room);
+            continue;
+          }
+          facultyThisSlot[timeSlot].add(entry.faculty);
+
+          if (roomThisSlot[timeSlot].has(entry.room)) {
+            daySchedule[i] = {
+              timeSlot: entry.timeSlot,
+              subject: "Free Period",
+              faculty: "",
+              room: entry.room
+            };
+            subjectCounts[entry.subject]--;
+            dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+            gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+            facultyAssignments[day][entry.timeSlot].delete(entry.faculty);
+            continue;
+          }
+          roomThisSlot[timeSlot].add(entry.room);
+        }
+      });
+
+      // Schedule missing classes
+      timetableData.subjects
+        .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+        .forEach(subject => {
+          const required = parseInt(subject.classesWeek);
+          const scheduled = subjectCounts[subject.code] || 0;
+          let toSchedule = required - scheduled;
+
+          let availableSlots = [];
+          days.forEach(day => {
+            uniqueTimeSlots.forEach((timeSlot, timeSlotIndex) => {
+              const slot = timetableData.timeSlots.find(slot => 
+                slot.day === day && `${slot.startTime}-${slot.endTime}` === timeSlot
+              );
+              if (!slot) return;
+              const slotApplicableTo = Array.isArray(slot.applicableTo) ? slot.applicableTo : [slot.applicableTo];
+              if (slotApplicableTo.some(item => item === gradeSection || item === `${grade.grade} - ${grade.section}`)) {
+                availableSlots.push({ day, timeSlot, timeSlotIndex });
+              }
+            });
+          });
+
+          availableSlots.sort(() => Math.random() - 0.5);
+
+          for (const { day, timeSlot, timeSlotIndex } of availableSlots) {
+            if (toSchedule <= 0) break;
+
+            // Once-per-day constraint (unless classesWeek > days.length)
+            if (dailySubjectAssignments[gradeSection][day][subject.code] && !subjectsNeedingSameDayScheduling.has(subject.code)) {
+              continue;
+            }
+
+            // No overlapping classes
+            if (gradeSectionAssignments[day][timeSlot].has(gradeSection)) {
+              // Try to replace a Free Period
+              const existingEntry = timetable[gradeSection][day].find(entry => entry.timeSlot === timeSlot);
+              if (existingEntry && existingEntry.subject === "Free Period") {
+                timetable[gradeSection][day] = timetable[gradeSection][day].filter(entry => entry !== existingEntry);
+                gradeSectionAssignments[day][timeSlot].delete(gradeSection);
+                facultyAssignments[day][timeSlot].delete(existingEntry.faculty);
+                roomAssignments[day][timeSlot].delete(existingEntry.room);
+              } else {
+                continue;
+              }
+            }
+
+            // Randomly select faculty
+            const facultyId = subject.facultyIds[Math.floor(Math.random() * subject.facultyIds.length)];
+            if (facultyAssignments[day][timeSlot].has(facultyId)) {
+              continue;
+            }
+
+            // Select room
+            let possibleRooms = [];
+            if (subject.assignedClasses && subject.assignedClasses.length > 0) {
+              possibleRooms = subject.assignedClasses;
+            } else if (grade.classAssignmentType === "same") {
+              possibleRooms = [gradeSectionRooms[gradeSection]];
+            } else {
+              possibleRooms = timetableData.classes
+                .filter(c => parseInt(c.capacity) >= parseInt(grade.strength))
+                .map(c => c.room);
+            }
+
+            const availableRooms = possibleRooms.filter(room => 
+              room !== "Unassigned" && !roomAssignments[day][timeSlot].has(room)
+            );
+            if (availableRooms.length === 0) continue;
+
+            const room = availableRooms[Math.floor(Math.random() * availableRooms.length)];
+
+            timetable[gradeSection][day].push({
+              timeSlot,
+              subject: subject.code,
+              faculty: facultyId,
+              room
+            });
+
+            toSchedule--;
+            subjectCounts[subject.code]++;
+            dailySubjectAssignments[gradeSection][day][subject.code] = true;
+            gradeSectionAssignments[day][timeSlot].add(gradeSection);
+            facultyAssignments[day][timeSlot].add(facultyId);
+            roomAssignments[day][timeSlot].add(room);
+          }
+
+          if (toSchedule > 0) {
+            conflicts.push(`Could not schedule ${toSchedule} remaining classes for ${subject.code} in ${gradeSection} due to constraints (once-per-day, no overlapping, or faculty/room availability). Add more slots, days, or resources, or relax constraints.`);
+          }
+        });
+    });
+
+    return timetable;
+  }
+
+  // Genetic Algorithm
+  const populationSize = 20;
+  const generations = 50;
+  let population = Array.from({ length: populationSize }, generateRandomTimetable);
+
+  for (let gen = 0; gen < generations; gen++) {
+    // Evaluate fitness of each timetable
+    const fitnessScores = population.map(timetable => {
+      const { fitness, conflicts: localConflicts } = evaluateFitness(timetable);
+      return { timetable, fitness, localConflicts };
+    });
+
+    // Sort by fitness (descending)
+    fitnessScores.sort((a, b) => b.fitness - a.fitness);
+
+    // Log progress
+    console.log(`Generation ${gen + 1}/${generations}: Best Fitness = ${fitnessScores[0].fitness}`);
+
+    // If the best timetable has no conflicts, use it
+    if (fitnessScores[0].fitness === 0) {
+      conflicts.push(...fitnessScores[0].localConflicts);
+      Object.assign(schedules, fitnessScores[0].timetable);
+      break;
+    }
+
+    // Select the top 20% to survive to the next generation
+    const eliteSize = Math.floor(populationSize * 0.2);
+    const nextPopulation = fitnessScores.slice(0, eliteSize).map(item => item.timetable);
+
+    // Generate the rest of the population through crossover and mutation
+    while (nextPopulation.length < populationSize) {
+      const parent1 = fitnessScores[Math.floor(Math.random() * eliteSize)].timetable;
+      const parent2 = fitnessScores[Math.floor(Math.random() * eliteSize)].timetable;
+      let child = crossover(parent1, parent2);
+      if (typeof mutate !== 'function') {
+        throw new Error("Mutation function is not defined. Please ensure the 'mutate' function is correctly implemented in the 'generateTimetableSchedule' function. Check the file for missing or misplaced function definitions.");
+      }
+      child = mutate(child);
+      nextPopulation.push(child);
+    }
+
+    population = nextPopulation;
+
+    // If last generation, use the best timetable
+    if (gen === generations - 1) {
+      conflicts.push(...fitnessScores[0].localConflicts);
+      Object.assign(schedules, fitnessScores[0].timetable);
+    }
+  }
+
+  // Final validation: Ensure all subjects meet classesWeek and fix remaining violations
   timetableData.grades.forEach(grade => {
     const gradeSection = `${grade.grade}-${grade.section}`;
-    const assignedRoom = gradeSectionRooms[gradeSection];
-
+    const subjectCounts = {};
     timetableData.subjects
       .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
       .forEach(subject => {
-        const requiredClasses = parseInt(subject.classesWeek);
-        let assignedClasses = subjectAssignmentCount[gradeSection][subject.code] || 0;
+        subjectCounts[subject.code] = 0;
+      });
 
-        if (assignedClasses < requiredClasses) {
-          days.forEach(day => {
-            const freePeriods = schedules[gradeSection][day].filter(
-              item => item.subject === "Free Period" && item.timeSlot
+    // Track assignments to avoid violations
+    const dailySubjectAssignments = {};
+    const gradeSectionAssignments = {};
+    const facultyAssignments = {};
+    const roomAssignments = {};
+    days.forEach(day => {
+      dailySubjectAssignments[gradeSection] = dailySubjectAssignments[gradeSection] || {};
+      dailySubjectAssignments[gradeSection][day] = {};
+      gradeSectionAssignments[day] = {};
+      facultyAssignments[day] = {};
+      roomAssignments[day] = {};
+      uniqueTimeSlots.forEach(timeSlot => {
+        gradeSectionAssignments[day][timeSlot] = new Set();
+        facultyAssignments[day][timeSlot] = new Set();
+        roomAssignments[day][timeSlot] = new Set();
+      });
+    });
+
+    // Check if any subject requires more classes than available days
+    const subjectsNeedingSameDayScheduling = new Set();
+    const subjectsForGrade = timetableData.subjects.filter(subject =>
+      subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section)
+    );
+    subjectsForGrade.forEach(subject => {
+      const weeklyClasses = parseInt(subject.classesWeek);
+      if (weeklyClasses > days.length) {
+        subjectsNeedingSameDayScheduling.add(subject.code);
+      }
+    });
+
+    // Remove duplicates and count scheduled classes
+    days.forEach(day => {
+      const daySchedule = schedules[gradeSection][day];
+      daySchedule.sort((a, b) => a.timeSlot.split('-')[0].localeCompare(b.timeSlot.split('-')[0]));
+
+      // Track entries and subjects per time slot to remove duplicates
+      const slotEntries = {};
+      const slotSubjects = {};
+      uniqueTimeSlots.forEach(timeSlot => {
+        slotEntries[timeSlot] = [];
+        slotSubjects[timeSlot] = new Set();
+      });
+
+      for (let i = 0; i < daySchedule.length; i++) {
+        const entry = daySchedule[i];
+        slotEntries[entry.timeSlot].push(entry);
+        if (entry.subject !== "Free Period") {
+          slotSubjects[entry.timeSlot].add(entry.subject);
+        }
+      }
+
+      // Rebuild daySchedule with exactly one entry per time slot
+      schedules[gradeSection][day] = [];
+      uniqueTimeSlots.forEach(timeSlot => {
+        const entries = slotEntries[timeSlot];
+        if (entries.length > 0) {
+          const classEntries = entries.filter(entry => entry.subject !== "Free Period");
+          let selectedEntry = null;
+          if (classEntries.length > 1) {
+            // If multiple classes, pick one and reschedule the others later
+            selectedEntry = classEntries[0];
+            // Update subject counts for the removed classes
+            for (let i = 1; i < classEntries.length; i++) {
+              const removedEntry = classEntries[i];
+              subjectCounts[removedEntry.subject]--;
+            }
+          } else if (classEntries.length === 1) {
+            selectedEntry = classEntries[0];
+          } else {
+            selectedEntry = entries[0]; // If all are Free Periods, take the first one
+          }
+          schedules[gradeSection][day].push(selectedEntry);
+        }
+      });
+    });
+
+    // Rebuild assignments after removing duplicates
+    days.forEach(day => {
+      schedules[gradeSection][day].forEach(entry => {
+        if (entry.subject !== "Free Period") {
+          subjectCounts[entry.subject]++;
+          dailySubjectAssignments[gradeSection][day][entry.subject] = true;
+          gradeSectionAssignments[day][entry.timeSlot].add(gradeSection);
+          facultyAssignments[day][entry.timeSlot].add(entry.faculty);
+          roomAssignments[day][entry.timeSlot].add(entry.room);
+        }
+      });
+    });
+
+    // Fix violations: same subject on same day, faculty/room double-booking
+    days.forEach(day => {
+      const daySchedule = schedules[gradeSection][day];
+      daySchedule.sort((a, b) => a.timeSlot.split('-')[0].localeCompare(b.timeSlot.split('-')[0]));
+
+      // Track subjects scheduled on this day
+      const subjectsThisDay = {};
+      for (let i = 0; i < daySchedule.length; i++) {
+        const entry = daySchedule[i];
+        if (entry.subject === "Free Period") continue;
+
+        // Same subject on same day (only a problem if not necessary)
+        if (subjectsThisDay[entry.subject] && !subjectsNeedingSameDayScheduling.has(entry.subject)) {
+          daySchedule[i] = {
+            timeSlot: entry.timeSlot,
+            subject: "Free Period",
+            faculty: "",
+            room: entry.room
+          };
+          subjectCounts[entry.subject]--;
+          dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+          gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+          facultyAssignments[day][entry.timeSlot].delete(entry.faculty);
+          roomAssignments[day][entry.timeSlot].delete(entry.room);
+          continue;
+        }
+        subjectsThisDay[entry.subject] = true;
+      }
+    });
+
+    // Fix faculty/room double-booking
+    days.forEach(day => {
+      const daySchedule = schedules[gradeSection][day];
+      const facultyThisSlot = {};
+      const roomThisSlot = {};
+      uniqueTimeSlots.forEach(timeSlot => {
+        facultyThisSlot[timeSlot] = new Set();
+        roomThisSlot[timeSlot] = new Set();
+      });
+
+      for (let i = 0; i < daySchedule.length; i++) {
+        const entry = daySchedule[i];
+        if (entry.subject === "Free Period") continue;
+
+        const timeSlot = entry.timeSlot;
+        if (facultyThisSlot[timeSlot].has(entry.faculty)) {
+          daySchedule[i] = {
+            timeSlot: entry.timeSlot,
+            subject: "Free Period",
+            faculty: "",
+            room: entry.room
+          };
+          subjectCounts[entry.subject]--;
+          dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+          gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+          roomAssignments[day][entry.timeSlot].delete(entry.room);
+          continue;
+        }
+        facultyThisSlot[timeSlot].add(entry.faculty);
+
+        if (roomThisSlot[timeSlot].has(entry.room)) {
+          daySchedule[i] = {
+            timeSlot: entry.timeSlot,
+            subject: "Free Period",
+            faculty: "",
+            room: entry.room
+          };
+          subjectCounts[entry.subject]--;
+          dailySubjectAssignments[gradeSection][day][entry.subject] = false;
+          gradeSectionAssignments[day][entry.timeSlot].delete(gradeSection);
+          facultyAssignments[day][entry.timeSlot].delete(entry.faculty);
+          continue;
+        }
+        roomThisSlot[timeSlot].add(entry.room);
+      }
+    });
+
+    // Schedule missing classes
+    timetableData.subjects
+      .filter(subject => subject.gradeSections.some(gs => gs.grade === grade.grade && gs.section === grade.section))
+      .forEach(subject => {
+        const required = parseInt(subject.classesWeek);
+        const scheduled = subjectCounts[subject.code] || 0;
+        let toSchedule = required - scheduled;
+
+        let availableSlots = [];
+        days.forEach(day => {
+          uniqueTimeSlots.forEach((timeSlot, timeSlotIndex) => {
+            const slot = timetableData.timeSlots.find(slot => 
+              slot.day === day && `${slot.startTime}-${slot.endTime}` === timeSlot
             );
-
-            for (const freePeriod of freePeriods) {
-              if (assignedClasses >= requiredClasses) break;
-
-              const timeSlot = freePeriod.timeSlot;
-              const timeSlotKey = `${day}_${timeSlot}`;
-
-              const availableFaculty = subject.facultyIds.find(
-                faculty => !facultyAssignments[timeSlotKey].has(faculty)
-              );
-
-              if (!availableFaculty) continue;
-
-              const possibleRooms = subject.assignedClasses && subject.assignedClasses.length > 0
-                ? subject.assignedClasses
-                : [assignedRoom].filter(room => room !== "Unassigned");
-
-              const availableRooms = possibleRooms.filter(
-                room => !roomAssignments[timeSlotKey].has(room) &&
-                        (!reservedRoomMapping[room] || reservedRoomMapping[room] === gradeSection)
-              );
-
-              if (availableRooms.length === 0) continue;
-
-              const selectedRoom = availableRooms[0];
-              schedules[gradeSection][day] = schedules[gradeSection][day].filter(
-                item => item !== freePeriod
-              );
-
-              subjectAssignmentCount[gradeSection][subject.code]++;
-              dailySubjectAssignments[gradeSection][day][subject.code] = 1;
-              facultyAssignments[timeSlotKey].add(availableFaculty);
-              roomAssignments[timeSlotKey].add(selectedRoom);
-              gradeSectionAssignments[day][timeSlot].add(gradeSection);
-              roomGradeSectionAssignments[day][timeSlot][selectedRoom] = gradeSection;
-
-              schedules[gradeSection][day].push({
-                timeSlot: timeSlot,
-                subject: subject.code,
-                faculty: availableFaculty,
-                room: selectedRoom
-              });
-
-              assignedClasses++;
+            if (!slot) return;
+            const slotApplicableTo = Array.isArray(slot.applicableTo) ? slot.applicableTo : [slot.applicableTo];
+            if (slotApplicableTo.some(item => item === gradeSection || item === `${grade.grade} - ${grade.section}`)) {
+              availableSlots.push({ day, timeSlot, timeSlotIndex });
             }
           });
+        });
 
-          if (assignedClasses < requiredClasses) {
-            conflicts.push(
-              `Could not schedule ${requiredClasses - assignedClasses} remaining classes for ${subject.code} in ${gradeSection}`
-            );
+        availableSlots.sort(() => Math.random() - 0.5);
+
+        for (const { day, timeSlot, timeSlotIndex } of availableSlots) {
+          if (toSchedule <= 0) break;
+
+          // Once-per-day constraint (unless classesWeek > days.length)
+          if (dailySubjectAssignments[gradeSection][day][subject.code] && !subjectsNeedingSameDayScheduling.has(subject.code)) {
+            continue;
           }
+
+          // No overlapping classes
+          if (gradeSectionAssignments[day][timeSlot].has(gradeSection)) {
+            // Try to replace a Free Period
+            const existingEntry = schedules[gradeSection][day].find(entry => entry.timeSlot === timeSlot);
+            if (existingEntry && existingEntry.subject === "Free Period") {
+              schedules[gradeSection][day] = schedules[gradeSection][day].filter(entry => entry !== existingEntry);
+              gradeSectionAssignments[day][timeSlot].delete(gradeSection);
+              facultyAssignments[day][timeSlot].delete(existingEntry.faculty);
+              roomAssignments[day][timeSlot].delete(existingEntry.room);
+            } else {
+              continue;
+            }
+          }
+
+          // Randomly select faculty
+          const facultyId = subject.facultyIds[Math.floor(Math.random() * subject.facultyIds.length)];
+          if (facultyAssignments[day][timeSlot].has(facultyId)) {
+            continue;
+          }
+
+          // Select room
+          let possibleRooms = [];
+          if (subject.assignedClasses && subject.assignedClasses.length > 0) {
+            possibleRooms = subject.assignedClasses;
+          } else if (grade.classAssignmentType === "same") {
+            possibleRooms = [gradeSectionRooms[gradeSection]];
+          } else {
+            possibleRooms = timetableData.classes
+              .filter(c => parseInt(c.capacity) >= parseInt(grade.strength))
+              .map(c => c.room);
+          }
+
+          const availableRooms = possibleRooms.filter(room => 
+            room !== "Unassigned" && !roomAssignments[day][timeSlot].has(room)
+          );
+          if (availableRooms.length === 0) continue;
+
+          const room = availableRooms[Math.floor(Math.random() * availableRooms.length)];
+
+          schedules[gradeSection][day].push({
+            timeSlot,
+            subject: subject.code,
+            faculty: facultyId,
+            room
+          });
+
+          toSchedule--;
+          subjectCounts[subject.code]++;
+          dailySubjectAssignments[gradeSection][day][subject.code] = true;
+          gradeSectionAssignments[day][timeSlot].add(gradeSection);
+          facultyAssignments[day][timeSlot].add(facultyId);
+          roomAssignments[day][timeSlot].add(room);
+        }
+
+        if (toSchedule > 0) {
+          conflicts.push(`Could not schedule ${toSchedule} remaining classes for ${subject.code} in ${gradeSection} due to constraints (once-per-day, no overlapping, or faculty/room availability). Add more slots, days, or resources, or relax constraints.`);
         }
       });
-  });
 
-  // STEP 3: Sort schedules by time slot and remove duplicates
-  timetableData.grades.forEach(grade => {
-    const gradeSection = `${grade.grade}-${grade.section}`;
-    
-    days.forEach(day => {
-      const filteredSchedule = [];
-      const processedTimeSlots = new Set();
-      
-      schedules[gradeSection][day].sort((a, b) => {
-        const timeA = a.timeSlot.split('-')[0];
-        const timeB = b.timeSlot.split('-')[0];
-        return timeA.localeCompare(timeB);
-      });
-      
-      schedules[gradeSection][day].forEach(item => {
-        if (item.subject === "Free Period") {
-          if (!processedTimeSlots.has(item.timeSlot) && 
-              (!item.room || 
-               item.room === "" || 
-               !roomGradeSectionAssignments[day][item.timeSlot] || 
-               roomGradeSectionAssignments[day][item.timeSlot][item.room] === gradeSection)) {
-            filteredSchedule.push(item);
-            processedTimeSlots.add(item.timeSlot);
-          }
-        } else {
-          filteredSchedule.push(item);
-          processedTimeSlots.add(item.timeSlot);
-        }
-      });
-      
-      schedules[gradeSection][day] = filteredSchedule;
-    });
+    // Log final counts for debugging
+    console.log(`Final subject counts for ${gradeSection}:`, subjectCounts);
   });
 
   // Log final schedules for debugging
@@ -1073,8 +1829,8 @@ export const generateTimetableSchedule = (timetableData) => {
     generationStatus: conflicts.length > 0 ? "partial" : "success",
     conflicts,
     schedules,
-    algorithm: "consistent-grade-section",
-    version: "1.0"
+    algorithm: "genetic-algorithm",
+    version: "2.0"
   };
 };
 

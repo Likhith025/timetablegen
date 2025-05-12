@@ -413,29 +413,56 @@ const TimetableViewer = ({ projectId, userId, userRole, userEmail }) => {
     const uniqueTimeSlots = uniqueTimeSlotsWithStart.map(slot => slot.timeSlot);
 
     const flatSchedule = [];
-    const slotIndices = {};
-    days.forEach(day => {
-      uniqueTimeSlots.forEach((timeSlot, tsIndex) => {
-        const slots = schedule[day]?.filter(slot => `${slot.timeSlot}` === timeSlot) || [];
-        const key = `${day}-${timeSlot}`;
-        slotIndices[key] = slotIndices[key] || 0;
+    const slotLookup = {};
 
-        if (slots.length > 0) {
-          slots.forEach((slot) => {
-            const index = slotIndices[key]++;
-            flatSchedule.push({
-              ...slot,
-              day,
-              timeSlot,
-              id: `${day}-${timeSlot}-${index}`,
-              isEmpty: false,
-            });
+    days.forEach(day => {
+      slotLookup[day] = {};
+      uniqueTimeSlots.forEach((timeSlot, tsIndex) => {
+        slotLookup[day][timeSlot] = [];
+        const slots = schedule[day]?.filter(slot => `${slot.timeSlot}` === timeSlot) || [];
+
+        // Filter slots to ensure only one entry per time slot
+        let selectedSlot = null;
+        const classSlots = slots.filter(slot => !isFreePeriod(slot));
+        if (classSlots.length > 0) {
+          // If there are class slots, pick the first one (prefer classes over Free Periods)
+          selectedSlot = classSlots[0];
+        } else if (slots.length > 0) {
+          // If no class slots but there are slots (e.g., Free Period), pick the first one
+          selectedSlot = slots[0];
+        }
+
+        if (selectedSlot) {
+          flatSchedule.push({
+            ...selectedSlot,
+            day,
+            timeSlot,
+            id: `${day}-${timeSlot}-0`,
+            isEmpty: false,
+          });
+          slotLookup[day][timeSlot].push({
+            ...selectedSlot,
+            day,
+            timeSlot,
+            id: `${day}-${timeSlot}-0`,
+            isEmpty: false,
           });
         } else {
+          // If no slot exists, add a placeholder (empty slot)
           flatSchedule.push({
             day,
             timeSlot,
-            id: `${day}-${timeSlot}-empty-${tsIndex}-${slotIndices[key]++}`,
+            id: `${day}-${timeSlot}-empty-${tsIndex}`,
+            isEmpty: true,
+            subject: 'Free Period',
+            faculty: null,
+            room: null,
+            gradeSection: null,
+          });
+          slotLookup[day][timeSlot].push({
+            day,
+            timeSlot,
+            id: `${day}-${timeSlot}-empty-${tsIndex}`,
             isEmpty: true,
             subject: 'Free Period',
             faculty: null,
@@ -443,14 +470,6 @@ const TimetableViewer = ({ projectId, userId, userRole, userEmail }) => {
             gradeSection: null,
           });
         }
-      });
-    });
-
-    const slotLookup = {};
-    days.forEach(day => {
-      slotLookup[day] = {};
-      uniqueTimeSlots.forEach(timeSlot => {
-        slotLookup[day][timeSlot] = flatSchedule.filter(slot => slot.day === day && slot.timeSlot === timeSlot);
       });
     });
 
