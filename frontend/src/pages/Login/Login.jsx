@@ -108,17 +108,6 @@ const Login = () => {
           <br />
           <button type="submit" className="button1">Log In</button>
         </form>
-        <p>Or</p>
-        <button className="SignInWithGoogle" onClick={() => googleLogin()}> 
-          <img 
-            src="https://developers.google.com/identity/images/g-logo.png" 
-            alt="Google Logo" 
-            className="glogo"
-            style={{ width: '20px', height: '20px', marginRight: '8px' }}
-          />
-          Sign In with Google
-        </button>
-        <p>
           Don't have an Account?{' '}
           <a 
             href="#" 
