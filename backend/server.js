@@ -14,12 +14,7 @@ const app = express();
 // Set up CORS to allow all origins dynamically
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow all origins by echoing the request's Origin header
-      callback(null, origin);
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: true, // Allow all origins dynamically
     credentials: true // Allow cookies/auth tokens
   })
 );
